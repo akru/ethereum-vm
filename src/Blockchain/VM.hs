@@ -516,7 +516,7 @@ runOperation CALL = do
 
   case maybeBytes of
     Nothing -> return ()
-    Just bytes -> mStoreByteString outOffset bytes
+    Just bytes -> mStoreByteString outOffset $ B.take (fromIntegral outSize) bytes
   
   push result
 
@@ -576,7 +576,7 @@ runOperation CALLCODE = do
 
   case maybeBytes of
     Nothing -> return ()
-    Just bytes -> mStoreByteString outOffset bytes
+    Just bytes -> mStoreByteString outOffset $ B.take (fromIntegral outSize) bytes
   
   push result
 
@@ -690,7 +690,12 @@ opGasPriceAndRefund SSTORE = do
       (0, x) | x /= (0::Word256) -> return (20000, 0)
       (x, 0) | x /= 0 -> return (5000, 15000)
       _ -> return (5000, 0)
-opGasPriceAndRefund SUICIDE = return (0, 24000)
+opGasPriceAndRefund SUICIDE = do
+    owner <- getEnvVar envOwner
+    currentSuicideList <- fmap suicideList $ lift get
+    if owner `elem` currentSuicideList
+       then return (0, 0)
+       else return (0, 24000)
 
 {-opGasPriceAndRefund RETURN = do
   size <- getStackItem 1
@@ -765,13 +770,16 @@ runCodeFromStart = do
 
   runCode 0
 
-runVMM::Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
-runVMM callDepth' env availableGas f = do
+runVMM::[Address]->Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
+runVMM preExistingSuicideList callDepth' env availableGas f = do
   dbs' <- get
   vmState <- liftIO $ startingState env dbs'
 
   result <- lift $ 
-      flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
+      flip runStateT vmState{
+                         callDepth=callDepth',
+                         vmGasRemaining=availableGas, 
+                         suicideList=preExistingSuicideList} $
       runEitherT f
 
   case result of
@@ -785,8 +793,8 @@ runVMM callDepth' env availableGas f = do
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
-create::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
-create b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
+create::[Address]->Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
+create preExistingSuicideList b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
   let env =
         Environment{
           envGasPrice=gasPrice',
@@ -815,7 +823,7 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
 
   ret <- 
     if success
-      then runVMM callDepth' env availableGas create'
+      then runVMM preExistingSuicideList callDepth' env availableGas create'
       else return (Left InsufficientFunds, vmState)
 
 
@@ -865,8 +873,8 @@ create' = do
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
-call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
+call::[Address]->Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
+call preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- getAddressState $ Address codeAddress
   code <- Code <$> fromMaybe B.empty <$> getCode (addressStateCodeHash addressState)
@@ -888,7 +896,7 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
   success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
   ret <- 
-    runVMM callDepth' env (fromIntegral availableGas) $ 
+    runVMM preExistingSuicideList callDepth' env (fromIntegral availableGas) $ 
     if codeAddress > 0 && codeAddress < 5
       then callPrecompiledContract codeAddress theData
       else call'
@@ -949,10 +957,12 @@ create_debugWrapper block owner value initCodeBytes = do
                           
       dbs' <- lift $ fmap dbs get
 
+      currentVMState <- lift get
+              
       let runEm::ContextM a->VMM (a, Context)
           runEm f = lift $ lift $ flip runStateT dbs' f
           callEm::ContextM (Either VMException Code, VMState)
-          callEm = create block (currentCallDepth+1) owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
+          callEm = create (suicideList currentVMState) block (currentCallDepth+1) owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
 
       ((result, finalVMState), finalDBs) <- runEm callEm
 
@@ -986,10 +996,12 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
 
   dbs' <- lift $ fmap dbs get
 
+  currentVMState <- lift get
+          
   let runEm::ContextM a->VMM (a, Context)
       runEm f = lift $ lift $ flip runStateT dbs' f
       callEm::ContextM (Either VMException B.ByteString, VMState)
-      callEm = call (envBlock env) (currentCallDepth+1) receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
+      callEm = call (suicideList currentVMState) (envBlock env) (currentCallDepth+1) receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
 
 
   ((result, finalVMState), finalDBs) <- 
