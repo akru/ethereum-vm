@@ -20,6 +20,7 @@ import Data.Char
 import Data.Function
 import Data.Functor
 import Data.Maybe
+import qualified Data.Set as S
 import Data.Time.Clock.POSIX
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -693,7 +694,7 @@ opGasPriceAndRefund SSTORE = do
 opGasPriceAndRefund SUICIDE = do
     owner <- getEnvVar envOwner
     currentSuicideList <- fmap suicideList $ lift get
-    if owner `elem` currentSuicideList
+    if owner `S.member` currentSuicideList
        then return (0, 0)
        else return (0, 24000)
 
@@ -770,7 +771,7 @@ runCodeFromStart = do
 
   runCode 0
 
-runVMM::[Address]->Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
+runVMM::S.Set Address->Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
 runVMM preExistingSuicideList callDepth' env availableGas f = do
   dbs' <- get
   vmState <- liftIO $ startingState env dbs'
@@ -793,7 +794,7 @@ runVMM preExistingSuicideList callDepth' env availableGas f = do
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
-create::[Address]->Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
+create::S.Set Address->Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
 create preExistingSuicideList b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
   let env =
         Environment{
@@ -873,7 +874,7 @@ create' = do
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call::[Address]->Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
+call::S.Set Address->Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
 call preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- getAddressState $ Address codeAddress
@@ -977,7 +978,8 @@ create_debugWrapper block owner value initCodeBytes = do
         Right _ -> do
 
           forM_ (reverse $ logs finalVMState) addLog
-          forM_ (reverse $ suicideList finalVMState) addSuicideList
+          state' <- lift get
+          lift $ put state'{suicideList = suicideList finalVMState}
 
           return $ Just newAddress
 
@@ -1013,7 +1015,8 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
   case result of
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
-          forM_ (reverse $ suicideList finalVMState) addSuicideList
+          state' <- lift get
+          lift $ put state'{suicideList = suicideList finalVMState}
           when flags_debug $
             liftIO $ putStrLn $ "Refunding: " ++ show (vmGasRemaining finalVMState)
           useGas (- vmGasRemaining finalVMState)

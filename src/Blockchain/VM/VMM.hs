@@ -7,6 +7,7 @@ import Control.Monad.Trans.Either
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import qualified Data.ByteString as B
+import qualified Data.Set as S
 
 import Blockchain.VMContext
 import Blockchain.Data.Address
@@ -103,7 +104,7 @@ addDebugCallCreate callCreate = do
 addSuicideList::Address->VMM ()
 addSuicideList address' = do
   state' <- lift get
-  lift $ put state'{suicideList = address':suicideList state'}
+  lift $ put state'{suicideList = address' `S.insert` suicideList state'}
 
 getEnvVar::(Environment->a)->VMM a
 getEnvVar f = do

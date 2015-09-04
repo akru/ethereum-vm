@@ -13,6 +13,7 @@ import Control.Monad
 import qualified Data.Vector.Storable.Mutable as V
 import qualified Data.ByteString as B
 import Data.IORef
+import qualified Data.Set as S
 import Data.Word
 
 
@@ -66,7 +67,7 @@ data VMState =
     callDepth::Int,
     refund::Integer,
     
-    suicideList::[Address],
+    suicideList::S.Set Address,
     done::Bool,
     returnVal::Maybe B.ByteString,
     debugCallCreates::Maybe [DebugCallCreate],
@@ -106,7 +107,7 @@ startingState env dbs' = do
                logs=[],
                environment=env,
                debugCallCreates=Nothing, --only used for running ethereum tests
-               suicideList=[]
+               suicideList=S.empty
              }
 
 {-

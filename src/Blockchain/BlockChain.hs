@@ -18,6 +18,7 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Functor
 import Data.List
 import Data.Maybe
+import qualified Data.Set as S
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
@@ -109,10 +110,10 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
       let transactions = blockReceiptTransactions b
 
-      fullSuicideList <- addTransactions [] b (blockDataGasLimit $ blockBlockData b) transactions
+      fullSuicideList <- addTransactions S.empty b (blockDataGasLimit $ blockBlockData b) transactions
 
-      when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> fullSuicideList)
-      forM_ fullSuicideList deleteAddressState
+      when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
+      forM_ (S.toList fullSuicideList) deleteAddressState
                          
       db <- getStateDB
 
@@ -160,7 +161,7 @@ deleteBlock b = do
 
   return ()
 
-addTransactions::[Address]->Block->Integer->[Transaction]->ContextM [Address]
+addTransactions::S.Set Address->Block->Integer->[Transaction]->ContextM (S.Set Address)
 addTransactions fullSuicideList _ _ [] = return fullSuicideList
 addTransactions preExistingSuicideList b blockGas (t:rest) = do
 
@@ -172,12 +173,12 @@ addTransactions preExistingSuicideList b blockGas (t:rest) = do
     case result of
       Left e -> do
           liftIO $ putStrLn $ CL.red "Insertion of transaction failed!  " ++ e
-          return ([], blockGas)
+          return (S.empty, blockGas)
       Right (resultState, g') -> return (suicideList resultState, g')
 
   addTransactions newSuicideList b remainingBlockGas rest
 
-addTransaction::[Address]->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
+addTransaction::S.Set Address->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
 addTransaction preExistingSuicideList b remainingBlockGas t = do
   tAddr <- whoSignedThisTransaction t ?! "malformed signature"
 
@@ -235,9 +236,9 @@ addTransaction preExistingSuicideList b remainingBlockGas t = do
         when (not s1) $ error "addToBalance failed even after a check in addTransaction"
         addressState' <- lift $ getAddressState tAddr
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState')
-        return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
+        return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=S.empty, logs=[], returnVal=Nothing}, remainingBlockGas)
 
-runCodeForTransaction::[Address]->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction::S.Set Address->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
 runCodeForTransaction preExistingSuicideList b availableGas tAddr newAddress ut | isContractCreationTX ut = do
   when flags_debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
