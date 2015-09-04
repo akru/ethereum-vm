@@ -84,9 +84,14 @@ getIdsFromBlock b = do
                    ( bdRef E.^. BlockDataRefBlockId E.==. block E.^. BlockId ))
         return $ (block E.^. BlockId, bdRef E.^. BlockDataRefId)
 
+setTitle::String->IO()
+setTitle value = do
+  putStr $ "\ESC]0;" ++ value ++ "\007"
+
 
 addBlock::Bool->Block->ContextM ()
 addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+  liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
   maybeParent <- getBlockLite $ blockDataParentHash bd
   case maybeParent of
