@@ -94,8 +94,10 @@ main = do
       homeDir <- liftIO getHomeDirectory                     
       sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      let hdb = sdb
-          cdb = sdb
+      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
       flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
                            hdb
