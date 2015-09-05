@@ -115,10 +115,10 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
       let transactions = blockReceiptTransactions b
 
-      fullSuicideList <- addTransactions S.empty b (blockDataGasLimit $ blockBlockData b) transactions
+      addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
-      when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
-      forM_ (S.toList fullSuicideList) deleteAddressState
+      --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
+      --forM_ (S.toList fullSuicideList) deleteAddressState
                          
       db <- getStateDB
 
@@ -166,13 +166,13 @@ deleteBlock b = do
 
   return ()
 
-addTransactions::S.Set Address->Block->Integer->[Transaction]->ContextM (S.Set Address)
-addTransactions fullSuicideList _ _ [] = return fullSuicideList
-addTransactions preExistingSuicideList b blockGas (t:rest) = do
+addTransactions::Block->Integer->[Transaction]->ContextM ()
+addTransactions _ _ [] = return ()
+addTransactions b blockGas (t:rest) = do
 
   result <-
     printTransactionMessage t b $
-      runEitherT $ addTransaction preExistingSuicideList b blockGas t
+      runEitherT $ addTransaction b blockGas t
 
   (newSuicideList, remainingBlockGas) <-
     case result of
@@ -181,10 +181,10 @@ addTransactions preExistingSuicideList b blockGas (t:rest) = do
           return (S.empty, blockGas)
       Right (resultState, g') -> return (suicideList resultState, g')
 
-  addTransactions newSuicideList b remainingBlockGas rest
+  addTransactions b remainingBlockGas rest
 
-addTransaction::S.Set Address->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
-addTransaction preExistingSuicideList b remainingBlockGas t = do
+addTransaction::Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
+addTransaction b remainingBlockGas t = do
   tAddr <- whoSignedThisTransaction t ?! "malformed signature"
 
   nonceValid <- lift $ isNonceValid t
@@ -218,7 +218,7 @@ addTransaction preExistingSuicideList b remainingBlockGas t = do
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction S.empty b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
+        (result, newVMState') <- lift $ runCodeForTransaction b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
         s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
         when (not s1) $ error "addToBalance failed even after a check in addBlock"
@@ -247,19 +247,19 @@ addTransaction preExistingSuicideList b remainingBlockGas t = do
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState')
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=S.empty, logs=[], returnVal=Nothing}, remainingBlockGas)
 
-runCodeForTransaction::S.Set Address->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction preExistingSuicideList b availableGas tAddr newAddress ut | isContractCreationTX ut = do
+runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX ut = do
   when flags_debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   (result, vmState) <-
-    create preExistingSuicideList b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
+    create S.empty b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction preExistingSuicideList b availableGas tAddr owner ut = do --MessageTX
+runCodeForTransaction b availableGas tAddr owner ut = do --MessageTX
   when flags_debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
-  call preExistingSuicideList b 0 owner owner tAddr
+  call S.empty b 0 owner owner tAddr
           (fromIntegral $ transactionValue ut) (fromIntegral $ transactionGasPrice ut)
           (transactionData ut) (fromIntegral availableGas) tAddr
 
