@@ -218,7 +218,7 @@ addTransaction preExistingSuicideList b remainingBlockGas t = do
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction preExistingSuicideList b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
+        (result, newVMState') <- lift $ runCodeForTransaction S.empty b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
         s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
         when (not s1) $ error "addToBalance failed even after a check in addBlock"
@@ -235,6 +235,10 @@ addTransaction preExistingSuicideList b remainingBlockGas t = do
 
             when (not success') $ error "oops, refund was too much"
 
+            when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList (suicideList newVMState'))
+            forM_ (S.toList $ suicideList newVMState') (lift . deleteAddressState)
+                         
+        
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
       else do
         s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
