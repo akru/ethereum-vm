@@ -73,7 +73,7 @@ wrapTransactions = do
   when (not $ null transactions) $ do
                      bestBlock <-getBestBlock
                      nextBlock <- liftIO $ getNextBlock bestBlock transactions
-                     blockId <- putBlockLite nextBlock 
+                     (blockId,_) <- putBlock nextBlock 
                      runResourceT $
                                   flip SQL.runSqlPool pool $ 
                                        E.update $ \t -> do
