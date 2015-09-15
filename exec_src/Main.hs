@@ -88,9 +88,12 @@ main::IO ()
 main = do
   _ <- $initHFlags "The Ethereum Haskell Peer"
 
+  homeDir <- getHomeDirectory
+  createDirectoryIfMissing False $ homeDir </> dbDir "h"
+
   _ <-
     runResourceT $ do
-      dbs <- openDBs "h"
+      dbs <- openDBs
       homeDir <- liftIO getHomeDirectory                     
       sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
