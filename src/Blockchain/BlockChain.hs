@@ -67,7 +67,7 @@ addBlocks isBeingCreated blocks = do
 
       return blkId
 
-  putProcessed $ map rocessed blkIds
+  putProcessed $ map Processed blkIds
 
   return ()
 
