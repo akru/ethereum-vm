@@ -56,13 +56,20 @@ import Blockchain.VM.VMState
 --import Debug.Trace
 
 addBlocks::Bool->[Block]->ContextM ()
-addBlocks isBeingCreated blocks = 
-  forM_ blocks $ \block -> do
-    before <- liftIO $ getPOSIXTime 
-    addBlock isBeingCreated block
-    after <- liftIO $ getPOSIXTime 
+addBlocks isBeingCreated blocks = do
+  blkIds <-
+    forM blocks $ \block -> do
+      before <- liftIO $ getPOSIXTime 
+      blkId <- addBlock isBeingCreated block
+      after <- liftIO $ getPOSIXTime 
 
-    liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+      liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+
+      return blkId
+
+  putProcessed $ map rocessed blkIds
+
+  return ()
 
 getIdsFromBlock::(HasSQLDB m, MonadResource m, MonadBaseControl IO m)=>
                      Block->m (E.Key Block, E.Key BlockDataRef)
@@ -89,14 +96,14 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Bool->Block->ContextM ()
+addBlock::Bool->Block->ContextM (E.Key Block)
 addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
   maybeParent <- getBlockLite $ blockDataParentHash bd
   case maybeParent of
     Nothing ->
-      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ format (blockDataParentHash bd) ++ "\n" ++
+      error $ "Missing parent block in addBlock: " ++ format (blockDataParentHash bd) ++ "\n" ++
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
       setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
@@ -143,8 +150,7 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
       -- let bytes = rlpSerialize $ rlpEncode b
       (blkId, blkDataId) <- getIdsFromBlock b'
       replaceBestIfBetter (blkDataId, b')
-      putProcessed $ Processed blkId
-      return ()
+      return blkId
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
              Block->m ()

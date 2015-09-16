@@ -109,7 +109,7 @@ main = do
                            Nothing) $ 
           forever $ do
             blocks <- getUnprocessedBlocks
-            forM_ blocks $ addBlock False
+            addBlocks False blocks
 
             when (flags_wrapTransactions) wrapTransactions
 
