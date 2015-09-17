@@ -117,7 +117,7 @@ main = do
 
   return ()
 
-getUnprocessedBlocks::ContextM [(E.Key Block, Block, Block)]
+getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, Block, Block)]
 getUnprocessedBlocks = do
   db <- getSQLDB
   blocks <-
@@ -132,13 +132,13 @@ getUnprocessedBlocks = do
       E.where_ (E.isNothing (processed E.?. ProcessedId))
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
       E.limit 1000
-      return (block E.^. BlockId, block, parent)
+      return (block E.^. BlockId, bd E.^. BlockDataRefId, block, parent)
       
   return $ map f blocks
 
   where
-    f::(E.Value (E.Key Block), E.Entity Block, E.Entity Block)->(E.Key Block, Block, Block)
-    f (x, y, z) = (E.unValue x, E.entityVal y, E.entityVal z)
+    f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, Block, Block)
+    f (bId, bdId, b, p) = (E.unValue bId, E.unValue bdId, E.entityVal b, E.entityVal p)
 
 getUnprocessedTransactions::ContextM [Transaction]
 getUnprocessedTransactions = do

@@ -55,49 +55,29 @@ import Blockchain.VM.VMState
 
 --import Debug.Trace
 
-addBlocks::Bool->[(E.Key Block, Block, Block)]->ContextM ()
+addBlocks::Bool->[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
 addBlocks isBeingCreated blocks = do
-  forM_ blocks $ \(_, block, parent) -> do
+  forM_ blocks $ \(bId, bdId, block, parent) -> do
     before <- liftIO $ getPOSIXTime 
-    blkId <- addBlock isBeingCreated parent block
+    blkId <- addBlock isBeingCreated bId bdId parent block
     after <- liftIO $ getPOSIXTime 
 
     liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
 
-  let fst3 (x, _, _) = x
+  let fst4 (x, _, _, _) = x
 
-  putProcessed $ map (Processed . fst3) blocks
+  putProcessed $ map (Processed . fst4) blocks
 
   return ()
 
-
-getIdsFromBlock::(HasSQLDB m, MonadResource m, MonadBaseControl IO m)=>
-                     Block->m (E.Key Block, E.Key BlockDataRef)
-getIdsFromBlock b = do
-  let h = blockHash b
-  db <- getSQLDB
-  ret <- runResourceT $
-    SQL.runSqlPool (actions h) db
-
-  case ret of
-    [] -> error "called getBlockIdFromBlock on a block that wasn't in the DB"
-    [(blockId, blockRefId)] -> return (E.unValue blockId , E.unValue blockRefId)
-    _ -> error "called getBlockIdFromBlock on a block that appears more than once in the DB"
-  where
-    actions h =
-      E.select $
-      E.from $ \(bdRef, block) -> do
-        E.where_ ( (bdRef E.^. BlockDataRefHash E.==. E.val h ) E.&&.
-                   ( bdRef E.^. BlockDataRefBlockId E.==. block E.^. BlockId ))
-        return $ (block E.^. BlockId, bdRef E.^. BlockDataRefId)
 
 setTitle::String->IO()
 setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Bool->Block->Block->ContextM ()
-addBlock isBeingCreated parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Bool->E.Key Block->E.Key BlockDataRef->Block->Block->ContextM ()
+addBlock isBeingCreated bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
@@ -129,7 +109,7 @@ addBlock isBeingCreated parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     then do
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
       putBlock $ newBlock
-      deleteBlock b
+      deleteBlock bId bdId b
 
       return newBlock
     else do
@@ -142,28 +122,27 @@ addBlock isBeingCreated parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
   case valid of
     Right () -> return ()
     Left err -> error err
-      -- let bytes = rlpSerialize $ rlpEncode b
-  (blkId, blkDataId) <- getIdsFromBlock b'
-  replaceBestIfBetter (blkDataId, b')
+
+  replaceBestIfBetter (bdId, b')
   return ()
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
-             Block->m ()
-deleteBlock b = do
+             E.Key Block->E.Key BlockDataRef->Block->m ()
+deleteBlock bId bdId b = do
   pool <- getSQLDB
-  (blkId, blkDataId) <- getIdsFromBlock b
+
   runResourceT $ flip SQL.runSqlPool pool $ do
              E.delete $
               E.from $ \t -> do
-                  E.where_ (t E.^. RawTransactionBlockId E.==. E.val blkId)
+                  E.where_ (t E.^. RawTransactionBlockId E.==. E.val bId)
 
              E.delete $
               E.from $ \b -> do
-                  E.where_ (b E.^. BlockDataRefId E.==. E.val blkDataId)
+                  E.where_ (b E.^. BlockDataRefId E.==. E.val bdId)
 
              E.delete $
               E.from $ \b -> do
-                  E.where_ (b E.^. BlockId E.==. E.val blkId)
+                  E.where_ (b E.^. BlockId E.==. E.val bId)
 
   return ()
 
