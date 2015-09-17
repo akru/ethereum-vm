@@ -117,22 +117,28 @@ main = do
 
   return ()
 
-getUnprocessedBlocks::ContextM [Block]
+getUnprocessedBlocks::ContextM [(E.Key Block, Block, Block)]
 getUnprocessedBlocks = do
   db <- getSQLDB
   blocks <-
     runResourceT $
     flip SQL.runSqlPool db $ 
     E.select $
-    E.from $ \(bd `E.InnerJoin` block `E.LeftOuterJoin` processed) -> do
-      E.on (E.just (block E.^. BlockId) E.==. processed E.?. ProcessedBlockId)
+    E.from $ \(processed `E.RightOuterJoin` block `E.InnerJoin` bd `E.InnerJoin` parentBD `E.InnerJoin` parent) -> do
+      E.on (parentBD E.^. BlockDataRefBlockId E.==. parent E.^. BlockId) 
+      E.on (bd E.^. BlockDataRefParentHash E.==. parentBD E.^. BlockDataRefHash) 
       E.on (bd E.^. BlockDataRefBlockId E.==. block E.^. BlockId)
+      E.on (E.just (block E.^. BlockId) E.==. processed E.?. ProcessedBlockId)
       E.where_ (E.isNothing (processed E.?. ProcessedId))
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
       E.limit 1000
-      return block
+      return (block E.^. BlockId, block, parent)
       
-  return $ map E.entityVal blocks
+  return $ map f blocks
+
+  where
+    f::(E.Value (E.Key Block), E.Entity Block, E.Entity Block)->(E.Key Block, Block, Block)
+    f (x, y, z) = (E.unValue x, E.entityVal y, E.entityVal z)
 
 getUnprocessedTransactions::ContextM [Transaction]
 getUnprocessedTransactions = do

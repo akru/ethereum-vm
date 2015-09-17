@@ -84,19 +84,15 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_useTestnet::Integer)
     return ()
 
-checkValidity::Monad m=>Block->ContextM (m ())
-checkValidity b = do
-  maybeParentBlock <- getBlockLite (blockDataParentHash $ blockBlockData b)
-  case maybeParentBlock of
-    Just parentBlock -> do
-          checkParentChildValidity b parentBlock
-          --nIsValid <- nonceIsValid' b
-          --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
-          unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
-          stateRootExists <- verifyStateRootExists b
-          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (blockDataStateRoot $ blockBlockData b))
-          return $ return ()
-    Nothing -> fail ("Parent Block does not exist: " ++ format (blockDataParentHash $ blockBlockData b))
+checkValidity::Monad m=>Block->Block->ContextM (m ())
+checkValidity parent b = do
+  checkParentChildValidity b parent
+  --nIsValid <- nonceIsValid' b
+  --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
+  unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
+  stateRootExists <- verifyStateRootExists b
+  unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (blockDataStateRoot $ blockBlockData b))
+  return $ return ()
 
 
 {-

@@ -55,21 +55,21 @@ import Blockchain.VM.VMState
 
 --import Debug.Trace
 
-addBlocks::Bool->[Block]->ContextM ()
+addBlocks::Bool->[(E.Key Block, Block, Block)]->ContextM ()
 addBlocks isBeingCreated blocks = do
-  blkIds <-
-    forM blocks $ \block -> do
-      before <- liftIO $ getPOSIXTime 
-      blkId <- addBlock isBeingCreated block
-      after <- liftIO $ getPOSIXTime 
+  forM_ blocks $ \(_, block, parent) -> do
+    before <- liftIO $ getPOSIXTime 
+    blkId <- addBlock isBeingCreated parent block
+    after <- liftIO $ getPOSIXTime 
 
-      liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+    liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
 
-      return blkId
+  let fst3 (x, _, _) = x
 
-  putProcessed $ map Processed blkIds
+  putProcessed $ map (Processed . fst3) blocks
 
   return ()
+
 
 getIdsFromBlock::(HasSQLDB m, MonadResource m, MonadBaseControl IO m)=>
                      Block->m (E.Key Block, E.Key BlockDataRef)
@@ -96,61 +96,56 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Bool->Block->ContextM (E.Key Block)
-addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Bool->Block->Block->ContextM ()
+addBlock isBeingCreated parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
-  maybeParent <- getBlockLite $ blockDataParentHash bd
-  case maybeParent of
-    Nothing ->
-      error $ "Missing parent block in addBlock: " ++ format (blockDataParentHash bd) ++ "\n" ++
-      "Block will not be added now, but will be requested and added later"
-    Just parentBlock -> do
-      setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
-      s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_useTestnet
-      when (not s1) $ error "addToBalance failed even after a check in addBlock"
 
-      forM_ uncles $ \uncle -> do
-        s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_useTestnet `quot` 32)
-        when (not s2) $ error "addToBalance failed even after a check in addBlock"
+  setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parent
+  s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_useTestnet
+  when (not s1) $ error "addToBalance failed even after a check in addBlock"
+
+  forM_ uncles $ \uncle -> do
+    s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_useTestnet `quot` 32)
+    when (not s2) $ error "addToBalance failed even after a check in addBlock"
         
-        s3 <- addToBalance
-              (blockDataCoinbase uncle)
-              ((rewardBase flags_useTestnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
-        when (not s3) $ error "addToBalance failed even after a check in addBlock"
+    s3 <- addToBalance
+          (blockDataCoinbase uncle)
+          ((rewardBase flags_useTestnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+    when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
 
-      let transactions = blockReceiptTransactions b
+  let transactions = blockReceiptTransactions b
 
-      addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
+  addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
                          
-      db <- getStateDB
+  db <- getStateDB
 
-      b' <-
-        if flags_wrapTransactions
-        then do
-          let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-          putBlock $ newBlock
-          deleteBlock b
+  b' <-
+    if flags_wrapTransactions
+    then do
+      let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
+      putBlock $ newBlock
+      deleteBlock b
 
-          return newBlock
-        else do
-          when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
-            liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
-            error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
-          return b
+      return newBlock
+    else do
+      when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
+        liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
+        error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
+      return b
 
-      valid <- checkValidity b'
-      case valid of
-        Right () -> return ()
-        Left err -> error err
+  valid <- checkValidity parent b'
+  case valid of
+    Right () -> return ()
+    Left err -> error err
       -- let bytes = rlpSerialize $ rlpEncode b
-      (blkId, blkDataId) <- getIdsFromBlock b'
-      replaceBestIfBetter (blkDataId, b')
-      return blkId
+  (blkId, blkDataId) <- getIdsFromBlock b'
+  replaceBestIfBetter (blkDataId, b')
+  return ()
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
              Block->m ()
