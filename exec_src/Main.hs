@@ -9,6 +9,7 @@ import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as SHA3
 import Data.Time.Clock
 import qualified Data.ByteString as B
+import qualified Data.Map as M
 import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
 import qualified Database.Esqueleto as E
@@ -106,9 +107,15 @@ main = do
                            hdb
                            cdb
                            (sqlDB' dbs)
-                           Nothing) $ 
+                           Nothing
+                           M.empty) $ 
           forever $ do
+            liftIO $ putStrLn "Getting Blocks"
             blocks <- getUnprocessedBlocks
+            liftIO $ putStrLn "Getting Transaction Senders"
+            transactionMap <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
+            putTransactionMap transactionMap
+            liftIO $ putStrLn "Adding Blocks"
             addBlocks False blocks
 
             when (flags_wrapTransactions) wrapTransactions
@@ -116,6 +123,9 @@ main = do
             when (length blocks < 100) $ liftIO $ threadDelay 50000
 
   return ()
+
+fst4::(a, b, c, d)->a
+fst4 (x, _, _, _) = x
 
 getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, Block, Block)]
 getUnprocessedBlocks = do
@@ -131,7 +141,7 @@ getUnprocessedBlocks = do
       E.on (E.just (block E.^. BlockId) E.==. processed E.?. ProcessedBlockId)
       E.where_ (E.isNothing (processed E.?. ProcessedId))
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
-      E.limit 1000
+      E.limit 10000
       return (block E.^. BlockId, bd E.^. BlockDataRefId, block, parent)
       
   return $ map f blocks
@@ -139,6 +149,23 @@ getUnprocessedBlocks = do
   where
     f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, Block, Block)
     f (bId, bdId, b, p) = (E.unValue bId, E.unValue bdId, E.entityVal b, E.entityVal p)
+
+getTransactionsForBlocks::[E.Key Block]->ContextM [(SHA, Address)]
+getTransactionsForBlocks blockHashes = do
+  db <- getSQLDB
+  blocks <-
+    runResourceT $
+    flip SQL.runSqlPool db $ 
+    E.select $
+    E.from $ \t -> do
+      E.where_ ((t E.^. RawTransactionBlockId) `E.in_` E.valList blockHashes)
+      return (t E.^. RawTransactionTxHash, t E.^. RawTransactionFromAddress)
+      
+  return $ map f blocks
+
+  where
+    f::(E.Value SHA, E.Value Address)->(SHA, Address)
+    f (h, a) = (E.unValue h, E.unValue a)
 
 getUnprocessedTransactions::ContextM [Transaction]
 getUnprocessedTransactions = do

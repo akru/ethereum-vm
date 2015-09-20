@@ -106,8 +106,6 @@ checkValidity parent b = do
 
 isNonceValid::Transaction->ContextM Bool
 isNonceValid t = do
-  case whoSignedThisTransaction t of
-    Nothing -> return False --no nonce would work
-    Just tAddr -> do
-      addressState <- getAddressState tAddr
-      return $ addressStateNonce addressState == transactionNonce t
+  tAddr <- getTransactionAddress t
+  addressState <- getAddressState tAddr
+  return $ addressStateNonce addressState == transactionNonce t

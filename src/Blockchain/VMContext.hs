@@ -7,6 +7,8 @@ module Blockchain.VMContext (
 --  clearDebugMsg,
   getCachedBestProcessedBlock,
   putCachedBestProcessedBlock,      
+  getTransactionAddress,
+  putTransactionMap,
   incrementNonce,
   getNewAddress
   ) where
@@ -15,11 +17,14 @@ module Blockchain.VMContext (
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.State
+import qualified Data.Map as M
+import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
+import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
@@ -27,6 +32,7 @@ import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
 import Blockchain.DB.StorageDB
 import Blockchain.Options
+import Blockchain.SHA
 
 --import Debug.Trace
 
@@ -36,7 +42,8 @@ data Context =
     contextHashDB::HashDB,
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
-    cachedBestProcessedBlock::Maybe Block
+    cachedBestProcessedBlock::Maybe Block,
+    transactionMap::M.Map SHA Address
     }
 
 type ContextM = StateT Context (ResourceT IO)
@@ -84,6 +91,16 @@ putCachedBestProcessedBlock::Block->ContextM ()
 putCachedBestProcessedBlock b = do
   cxt <- get
   put cxt{cachedBestProcessedBlock=Just b}
+
+getTransactionAddress::Transaction->ContextM Address
+getTransactionAddress t = do
+  cxt <- get
+  return $ fromMaybe (error "missing value in transaction map") $ M.lookup (transactionHash t) (transactionMap cxt)
+
+putTransactionMap::M.Map SHA Address->ContextM ()
+putTransactionMap tm = do
+  cxt <- get
+  put cxt{transactionMap=tm}
 
 incrementNonce::(HasStateDB m, HasHashDB m)=>
                 Address->m ()

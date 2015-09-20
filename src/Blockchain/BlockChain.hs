@@ -167,7 +167,7 @@ addTransactions b blockGas (t:rest) = do
 
 addTransaction::Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
 addTransaction b remainingBlockGas t = do
-  tAddr <- whoSignedThisTransaction t ?! "malformed signature"
+  tAddr <- lift $ getTransactionAddress t
 
   nonceValid <- lift $ isNonceValid t
 
@@ -267,18 +267,18 @@ intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrD
 
 printTransactionMessage::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
 printTransactionMessage t b f = do
-  case whoSignedThisTransaction t of
-    Just tAddr -> do
-      nonce <- fmap addressStateNonce $ getAddressState tAddr
-      liftIO $ putStrLn $ CL.magenta "    =========================================================================="
-      liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
-      liftIO $ putStrLn $ CL.magenta "    |    " ++
-        (
-          if isMessageTX t
-          then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
-          else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
-        ) ++ CL.magenta " |"
-    _ -> liftIO $ putStrLn $ CL.red $ "Malformed Signature!"
+  tAddr <- getTransactionAddress t
+
+  nonce <- fmap addressStateNonce $ getAddressState tAddr
+  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
+  liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  liftIO $ putStrLn $ CL.magenta "    |    " ++
+    (
+      if isMessageTX t
+      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
+      else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
+    ) ++ CL.magenta " |"
+
 
   stateRootBefore <- fmap MP.stateRoot getStateDB
 
