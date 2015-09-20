@@ -64,6 +64,9 @@ addBlocks isBeingCreated blocks = do
 
     liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
 
+  let (_, lastBDId, lastBlock, _) = last blocks
+  replaceBestIfBetter (lastBDId, lastBlock)
+
   let fst4 (x, _, _, _) = x
 
   putProcessed $ map (Processed . fst4) blocks
@@ -123,7 +126,6 @@ addBlock isBeingCreated bId bdId parent b@Block{blockBlockData=bd, blockBlockUnc
     Right () -> return ()
     Left err -> error err
 
-  replaceBestIfBetter (bdId, b')
   return ()
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
