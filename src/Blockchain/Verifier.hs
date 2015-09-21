@@ -36,14 +36,21 @@ initializeBlockChain = do
   detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
 -}
 
-nextDifficulty::Integer->UTCTime->UTCTime->Integer
-nextDifficulty oldDifficulty oldTime newTime = max nextDiff' minimumDifficulty
+nextDifficulty::Integer->Integer->UTCTime->UTCTime->Integer
+nextDifficulty parentNumber oldDifficulty oldTime newTime =
+  (max nextDiff' minimumDifficulty) + expAdjustment
     where
       nextDiff' = 
           if round (utcTimeToPOSIXSeconds newTime) >=
                  (round (utcTimeToPOSIXSeconds oldTime) + difficultyDurationLimit flags_useTestnet::Integer)
           then oldDifficulty - oldDifficulty `shiftR` difficultyAdjustment
           else oldDifficulty + oldDifficulty `shiftR` difficultyAdjustment
+      periodCount = (parentNumber+1) `quot` difficultyExpDiffPeriod
+      expAdjustment =
+        if periodCount > 1
+        then 2^(periodCount - 2)
+        else 0
+
 
 {-
 nextGasLimit::Integer->Integer->Integer
@@ -72,8 +79,8 @@ verifyStateRootExists b = do
 
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
-    unless (blockDataDifficulty c == nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
+    unless (blockDataDifficulty c == nextDifficulty (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
+             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
     unless (blockDataNumber c == blockDataNumber p + 1) 
              $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
     unless (blockDataGasLimit c <= blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p))
