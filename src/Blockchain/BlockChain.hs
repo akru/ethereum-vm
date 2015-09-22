@@ -299,23 +299,23 @@ printTransactionMessage t b f = do
           Left err -> (err, "", []) --TODO keep the trace when the run fails
           Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state')
 
-  _ <-
-        putTransactionResult $
-        TransactionResult {
-          transactionResultBlockHash=blockHash b,
-          transactionResultTransactionHash=transactionHash t,
-          transactionResultMessage=resultString,
-          transactionResultResponse=response,
-          transactionResultTrace=theTrace',
-          transactionResultGasUsed=0,
-          transactionResultEtherUsed=0,
-          transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
-          transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
-          transactionResultTime=realToFrac $ after - before::Double,
-          transactionResultNewStorage="",
-          transactionResultDeletedStorage=""
-          }
-  
+  when flags_createTransactionResults $ do
+    _ <- putTransactionResult $
+           TransactionResult {
+             transactionResultBlockHash=blockHash b,
+             transactionResultTransactionHash=transactionHash t,
+             transactionResultMessage=resultString,
+             transactionResultResponse=response,
+             transactionResultTrace=theTrace',
+             transactionResultGasUsed=0,
+             transactionResultEtherUsed=0,
+             transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
+             transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
+             transactionResultTime=realToFrac $ after - before::Double,
+             transactionResultNewStorage="",
+             transactionResultDeletedStorage=""
+             } 
+    return ()
 
   --clearDebugMsg
 
@@ -354,7 +354,10 @@ replaceBestIfBetter (blkDataId, b) = do
   let n = blockDataNumber (blockBlockData b)
 
   when (n > blockDataNumber (blockBlockData best)) $ do
-    let oldStateRoot = blockDataStateRoot (blockBlockData best)
-        newStateRoot = blockDataStateRoot (blockBlockData b)
-    sqlDiff blkDataId n oldStateRoot newStateRoot
+
+    when flags_sqlDiff $ do
+      let oldStateRoot = blockDataStateRoot (blockBlockData best)
+          newStateRoot = blockDataStateRoot (blockBlockData b)
+      sqlDiff blkDataId n oldStateRoot newStateRoot
+      
     putCachedBestProcessedBlock b

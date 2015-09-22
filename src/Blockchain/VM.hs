@@ -758,10 +758,11 @@ runCode c = do
 
   env <- lift $ fmap environment get
 
-  vmTrace $
-    "EVM [ eth | " ++ show (callDepth vmState) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc vmState)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining vmState) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining result) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]\n"
+  when flags_createTransactionResults $
+    vmTrace $
+      "EVM [ eth | " ++ show (callDepth vmState) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc vmState)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining vmState) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining result) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]\n"
 
-  when flags_debug $ printDebugInfo (environment result) memBefore memAfter c op vmState result
+  when flags_debug $ printDebugInfo (environment result) memBefore memAfter c op vmState result 
 
   case result of
     VMState{done=True} -> incrementPC len
