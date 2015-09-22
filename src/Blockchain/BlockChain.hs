@@ -290,16 +290,15 @@ printTransactionMessage t b f = do
 
   stateRootAfter <- fmap MP.stateRoot getStateDB
 
-  mpdb <- getStateDB
-  
-  addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
-
-  let (resultString, response, theTrace') =
-        case result of 
-          Left err -> (err, "", []) --TODO keep the trace when the run fails
-          Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state')
-
   when flags_createTransactionResults $ do
+    mpdb <- getStateDB
+    addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
+
+    let (resultString, response, theTrace') =
+          case result of 
+            Left err -> (err, "", []) --TODO keep the trace when the run fails
+            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state')
+
     _ <- putTransactionResult $
            TransactionResult {
              transactionResultBlockHash=blockHash b,
