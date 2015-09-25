@@ -55,11 +55,11 @@ import Blockchain.VM.VMState
 
 --import Debug.Trace
 
-addBlocks::Bool->[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
-addBlocks isBeingCreated blocks = do
+addBlocks::[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
+addBlocks blocks = do
   forM_ blocks $ \(bId, bdId, block, parent) -> do
     before <- liftIO $ getPOSIXTime 
-    blkId <- addBlock isBeingCreated bId bdId parent block
+    addBlock bId bdId parent block
     after <- liftIO $ getPOSIXTime 
 
     liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
@@ -69,7 +69,7 @@ addBlocks isBeingCreated blocks = do
 
   let fst4 (x, _, _, _) = x
 
-  putProcessed $ map (Processed . fst4) blocks
+  _ <- putProcessed $ map (Processed . fst4) blocks
 
   return ()
 
@@ -79,8 +79,8 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Bool->E.Key Block->E.Key BlockDataRef->Block->Block->ContextM ()
-addBlock isBeingCreated bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::E.Key Block->E.Key BlockDataRef->Block->Block->ContextM ()
+addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
@@ -111,8 +111,8 @@ addBlock isBeingCreated bId bdId parent b@Block{blockBlockData=bd, blockBlockUnc
     if flags_wrapTransactions
     then do
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-      putBlock $ newBlock
-      deleteBlock bId bdId b
+      _ <- putBlock $ newBlock
+      deleteBlock bId bdId
 
       return newBlock
     else do
@@ -129,8 +129,8 @@ addBlock isBeingCreated bId bdId parent b@Block{blockBlockData=bd, blockBlockUnc
   return ()
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
-             E.Key Block->E.Key BlockDataRef->Block->m ()
-deleteBlock bId bdId b = do
+             E.Key Block->E.Key BlockDataRef->m ()
+deleteBlock bId bdId = do
   pool <- getSQLDB
 
   runResourceT $ flip SQL.runSqlPool pool $ do
@@ -156,7 +156,7 @@ addTransactions b blockGas (t:rest) = do
     printTransactionMessage t b $
       runEitherT $ addTransaction b blockGas t
 
-  (newSuicideList, remainingBlockGas) <-
+  (_, remainingBlockGas) <-
     case result of
       Left e -> do
           liftIO $ putStrLn $ CL.red "Insertion of transaction failed!  " ++ e
@@ -227,7 +227,27 @@ addTransaction b remainingBlockGas t = do
         when (not s1) $ error "addToBalance failed even after a check in addTransaction"
         addressState' <- lift $ getAddressState tAddr
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState')
-        return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=S.empty, logs=[], returnVal=Nothing}, remainingBlockGas)
+        return
+          (
+            VMState{
+               vmException=Just InsufficientFunds,
+               vmGasRemaining=0,
+               refund=0,
+               debugCallCreates=Nothing,
+               suicideList=S.empty,
+               logs=[],
+               returnVal=Nothing,
+               dbs=undefined,
+               pc=undefined,
+               memory=undefined,
+               stack=undefined,
+               callDepth=undefined,
+               done=undefined,
+               theTrace=undefined,
+               environment=undefined
+               },
+            remainingBlockGas
+          )
 
 runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
 runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX ut = do
@@ -331,24 +351,15 @@ printTransactionMessage t b f = do
 formatAddress::Address->String
 formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 
---Convert Maybe exception handling to EitherT exception
-(?!)::Monad m=>
-      Maybe a->err->EitherT err m a
-x ?! err = maybe (left err) return $ x
-
-
-
-
-
 ----------------
 
 replaceBestIfBetter::(BlockDataRefId, Block)->ContextM ()
 replaceBestIfBetter (blkDataId, b) = do
-  cachedBestProcessedBlock <- getCachedBestProcessedBlock
+  theCachedBestProcessedBlock <- getCachedBestProcessedBlock
   best <-
-      case cachedBestProcessedBlock of
+      case theCachedBestProcessedBlock of
         Nothing -> getBestProcessedBlock
-        Just b -> return b
+        Just b' -> return b'
 
   let n = blockDataNumber (blockBlockData b)
 

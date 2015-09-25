@@ -12,7 +12,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
-import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import Data.Bits
 import qualified Data.ByteString as B
@@ -23,7 +22,6 @@ import Data.Maybe
 import qualified Data.Set as S
 import Data.Time.Clock.POSIX
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
 
 import qualified Blockchain.Colors as CL
@@ -35,11 +33,9 @@ import Blockchain.Data.Code
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
-import Blockchain.DB.HashDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.ExtWord
-import Blockchain.Format
 import Blockchain.Options
 import Blockchain.SHA
 import Blockchain.Util
@@ -165,7 +161,7 @@ getBlockWithNumber::Integer->Block->VMM (Maybe Block)
 getBlockWithNumber num b | num == blockDataNumber (blockBlockData b) = return $ Just b
 getBlockWithNumber num b | num > blockDataNumber (blockBlockData b) = return Nothing
 getBlockWithNumber num b = do
-  parentBlock <- getBlockLite $ blockDataParentHash $ blockBlockData b
+  parentBlock <- getBlock $ blockDataParentHash $ blockBlockData b
   getBlockWithNumber num $
     fromMaybe (error "missing parent block in call to getBlockWithNumber") parentBlock
 
@@ -717,7 +713,8 @@ formatOp x = show x
 
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
-printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
+--printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
+printDebugInfo _ _ _15 _ op stateBefore stateAfter = do
 
   --CPP style trace
 {-  liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
@@ -816,9 +813,9 @@ create preExistingSuicideList b callDepth' sender origin value' gasPrice' availa
           envJumpDests = getValidJUMPDESTs init'
           }
 
-  dbs <- get
+  dbs' <- get
 
-  vmState <- liftIO $ startingState env dbs
+  vmState <- liftIO $ startingState env dbs'
 
   success <- 
     if toInteger value' > 0

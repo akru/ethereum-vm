@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Blockchain.VM.VMM where
 
@@ -29,7 +30,7 @@ type VMM = EitherT VMException (StateT VMState (ResourceT IO))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
 instance MonadResource VMM where
-
+  
 instance HasHashDB VMM where
     getHashDB = lift $ fmap (contextHashDB . dbs) get
 

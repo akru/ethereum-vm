@@ -3,10 +3,8 @@
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
-import qualified Crypto.Hash.SHA3 as SHA3
 import Data.Time.Clock
 import qualified Data.ByteString as B
 import qualified Data.Map as M
@@ -27,7 +25,6 @@ import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
-import Blockchain.Format
 import Blockchain.Options
 import Blockchain.SHA
 import Blockchain.Verifier
@@ -40,8 +37,7 @@ Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3d
 getNextBlock::Block->[Transaction]->IO Block
 getNextBlock b transactions = do
   ts <- getCurrentTime
-  let theCoinbase = prvKey2Address coinbasePrvKey
-      bd = blockBlockData b
+  let bd = blockBlockData b
   return Block{
                blockBlockData=
                BlockData {
@@ -95,7 +91,6 @@ main = do
   _ <-
     runResourceT $ do
       dbs <- openDBs
-      homeDir <- liftIO getHomeDirectory                     
       sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
       hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
@@ -113,10 +108,10 @@ main = do
             liftIO $ putStrLn "Getting Blocks"
             blocks <- getUnprocessedBlocks
             liftIO $ putStrLn "Getting Transaction Senders"
-            transactionMap <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
-            putTransactionMap transactionMap
+            transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
+            putTransactionMap transactionMap'
             liftIO $ putStrLn "Adding Blocks"
-            addBlocks False blocks
+            addBlocks blocks
 
             when (flags_wrapTransactions) wrapTransactions
 
