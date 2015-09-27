@@ -111,7 +111,7 @@ addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = d
     if flags_wrapTransactions
     then do
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-      _ <- putBlock $ newBlock
+      _ <- putBlocks [newBlock]
       deleteBlock bId bdId
 
       return newBlock
