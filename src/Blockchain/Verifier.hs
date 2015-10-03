@@ -38,7 +38,7 @@ initializeBlockChain = do
 
 nextDifficulty::Integer->Integer->UTCTime->UTCTime->Integer
 nextDifficulty parentNumber oldDifficulty oldTime newTime =
-  (max nextDiff' minimumDifficulty) + expAdjustment
+  (max nextDiff' minimumDifficulty) + if flags_useTestnet then 0 else expAdjustment
     where
       nextDiff' = 
           if round (utcTimeToPOSIXSeconds newTime) >=
