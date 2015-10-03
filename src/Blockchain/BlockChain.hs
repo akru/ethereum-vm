@@ -69,7 +69,7 @@ addBlocks blocks = do
 
   let fst4 (x, _, _, _) = x
 
-  _ <- putProcessed $ map (Processed . fst4) blocks
+  _ <- deleteProcessed $ map fst4 blocks
 
   return ()
 
