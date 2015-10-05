@@ -129,11 +129,11 @@ getUnprocessedBlocks = do
     runResourceT $
     flip SQL.runSqlPool db $ 
     E.select $
-    E.from $ \(processed `E.InnerJoin` block `E.InnerJoin` bd `E.InnerJoin` parentBD `E.InnerJoin` parent) -> do
+    E.from $ \(unprocessed `E.InnerJoin` block `E.InnerJoin` bd `E.InnerJoin` parentBD `E.InnerJoin` parent) -> do
       E.on (parentBD E.^. BlockDataRefBlockId E.==. parent E.^. BlockId) 
       E.on (bd E.^. BlockDataRefParentHash E.==. parentBD E.^. BlockDataRefHash) 
       E.on (bd E.^. BlockDataRefBlockId E.==. block E.^. BlockId)
-      E.on (E.just (block E.^. BlockId) E.==. processed E.?. ProcessedBlockId)
+      E.on (E.just (block E.^. BlockId) E.==. unprocessed E.?. UnprocessedBlockId)
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
       E.limit 10000
       return (block E.^. BlockId, bd E.^. BlockDataRefId, block, parent)
