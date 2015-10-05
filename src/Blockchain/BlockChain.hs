@@ -36,7 +36,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
-import Blockchain.Data.ProcessedDB
+import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
@@ -69,7 +69,7 @@ addBlocks blocks = do
 
   let fst4 (x, _, _, _) = x
 
-  _ <- deleteProcessed $ map fst4 blocks
+  _ <- deleteUnprocessed $ map fst4 blocks
 
   return ()
 
