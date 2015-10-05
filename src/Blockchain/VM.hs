@@ -548,6 +548,8 @@ runOperation CALLCODE = do
 
   callDepth' <- getCallDepth
 
+  when (toInteger gas > vmGasRemaining vmState) $ left OutOfGasException
+
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
@@ -901,7 +903,7 @@ call preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) se
   success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
   ret <- 
-    runVMM preExistingSuicideList callDepth' env (fromIntegral availableGas) $ 
+    runVMM preExistingSuicideList callDepth' env availableGas $ 
     if codeAddress > 0 && codeAddress < 5
       then callPrecompiledContract codeAddress theData
       else call'
