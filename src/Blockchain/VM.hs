@@ -17,7 +17,6 @@ import Data.Bits
 import qualified Data.ByteString as B
 import Data.Char
 import Data.Function
-import Data.Functor
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Time.Clock.POSIX
@@ -899,8 +898,9 @@ call preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) se
           envJumpDests = getValidJUMPDESTs code
           }
 
-  
-  success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
+
+  --TODO- Deal with this return value
+  _ <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
   ret <- 
     runVMM preExistingSuicideList callDepth' env availableGas $ 

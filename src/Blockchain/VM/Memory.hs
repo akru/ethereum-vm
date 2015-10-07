@@ -21,7 +21,6 @@ import Control.Monad.Trans.State hiding (state)
 import qualified Data.Vector.Storable.Mutable as V
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import Data.Functor
 import Data.IORef
 import Data.Word
 import Foreign

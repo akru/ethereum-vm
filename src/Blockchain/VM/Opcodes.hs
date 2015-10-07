@@ -5,7 +5,6 @@ import Prelude hiding (LT, GT, EQ)
 
 import Data.Binary
 import qualified Data.ByteString as B
-import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
 import Network.Haskoin.Internals

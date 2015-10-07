@@ -10,7 +10,6 @@ import Control.Monad
 import Data.Binary hiding (get)
 import Data.Bits
 import qualified Data.ByteString.Lazy as BL
-import Data.Functor
 import Data.Time
 import Data.Time.Clock.POSIX
 

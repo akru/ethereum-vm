@@ -15,7 +15,6 @@ import Control.Monad.Trans.Either
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
-import Data.Functor
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
@@ -41,7 +40,6 @@ import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
-import Blockchain.DB.DetailsDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.Constants

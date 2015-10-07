@@ -29,7 +29,9 @@ import Blockchain.SHA
 type VMM = EitherT VMException (StateT VMState (ResourceT IO))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
+--TODO- Do I really need this?  Is it bad that it is undefined?
 instance MonadResource VMM where
+  liftResourceT = error "liftResourceT undefined for VMM"
   
 instance HasHashDB VMM where
     getHashDB = lift $ fmap (contextHashDB . dbs) get
