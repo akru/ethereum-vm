@@ -36,6 +36,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
+import Blockchain.Data.Extra
 import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
@@ -355,19 +356,16 @@ formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 
 replaceBestIfBetter::(BlockDataRefId, Block)->ContextM ()
 replaceBestIfBetter (blkDataId, b) = do
-  theCachedBestProcessedBlock <- getCachedBestProcessedBlock
-  best <-
-      case theCachedBestProcessedBlock of
-        Nothing -> getBestProcessedBlock
-        Just b' -> return b'
+  (oldStateRoot, bestNumber) <- getBestProcessedStateRoot
 
-  let n = blockDataNumber (blockBlockData b)
+  let newNumber = blockDataNumber $ blockBlockData b
 
-  when (n > blockDataNumber (blockBlockData best)) $ do
+  liftIO $ putStrLn $ "newNumber = " ++ show newNumber ++ ", bestNumber = " ++ show bestNumber
+
+  when (newNumber > bestNumber) $ do
 
     when flags_sqlDiff $ do
-      let oldStateRoot = blockDataStateRoot (blockBlockData best)
-          newStateRoot = blockDataStateRoot (blockBlockData b)
-      sqlDiff blkDataId n oldStateRoot newStateRoot
+      let newStateRoot = blockDataStateRoot (blockBlockData b)
+      sqlDiff blkDataId newNumber oldStateRoot newStateRoot
       
-    putCachedBestProcessedBlock b
+      putBestProcessedStateRoot newStateRoot newNumber
