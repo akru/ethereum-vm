@@ -547,7 +547,7 @@ runOperation CALLCODE = do
 
   callDepth' <- getCallDepth
 
-  when (toInteger gas > vmGasRemaining vmState) $ left OutOfGasException
+  when (toInteger gas > vmGasRemaining vmState + stipend) $ left OutOfGasException
 
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
