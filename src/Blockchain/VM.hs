@@ -544,10 +544,7 @@ runOperation CALLCODE = do
 
   addressState <- getAddressState owner
 
-
   callDepth' <- getCallDepth
-
-  when (toInteger gas > vmGasRemaining vmState + stipend) $ left OutOfGasException
 
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
@@ -664,12 +661,14 @@ opGasPriceAndRefund CALLCODE = do
 
 --  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
 
-  return $ (fromIntegral $
-                fromIntegral gas +
-                fromIntegral gCALL +
---                (if toAccountExists then 0 else gCALLNEWACCOUNT) +
-                (if val > 0 then gCALLVALUETRANSFER else 0),
-            0)
+  return
+    (
+      toInteger gas +
+      gCALL +
+      --(if toAccountExists then 0 else gCALLNEWACCOUNT) +
+      (if val > 0 then toInteger gCALLVALUETRANSFER else 0),
+      0
+    )
 
 
 opGasPriceAndRefund CODECOPY = do
