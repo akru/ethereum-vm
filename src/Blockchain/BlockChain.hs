@@ -55,6 +55,7 @@ import Blockchain.VM.VMState
 --import Debug.Trace
 
 addBlocks::[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
+addBlocks [] = return ()
 addBlocks blocks = do
   forM_ blocks $ \(bId, bdId, block, parent) -> do
     before <- liftIO $ getPOSIXTime 
@@ -63,7 +64,7 @@ addBlocks blocks = do
 
     liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
 
-  let (_, lastBDId, lastBlock, _) = last blocks
+  let (_, lastBDId, lastBlock, _) = last blocks --last is OK, because we filter out blocks=[] in the addBlocks pattern match
   replaceBestIfBetter (lastBDId, lastBlock)
 
   let fst4 (x, _, _, _) = x
