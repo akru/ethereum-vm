@@ -57,19 +57,21 @@ import Blockchain.VM.VMState
 addBlocks::[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
-  forM_ blocks $ \(bId, bdId, block, parent) -> do
+  blocks' <- forM blocks $ \(bId, bdId, block, parent) -> do
     before <- liftIO $ getPOSIXTime 
-    addBlock bId bdId parent block
+    (bId', bdId', block') <- addBlock bId bdId parent block
     after <- liftIO $ getPOSIXTime 
 
     liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
 
-  let (_, lastBDId, lastBlock, _) = last blocks --last is OK, because we filter out blocks=[] in the addBlocks pattern match
+    return (bId', bdId', block', parent)
+
+  let (_, lastBDId, lastBlock, _) = last blocks' --last is OK, because we filter out blocks=[] in the addBlocks pattern match
   replaceBestIfBetter (lastBDId, lastBlock)
 
   let fst4 (x, _, _, _) = x
 
-  _ <- deleteUnprocessed $ map fst4 blocks
+  _ <- deleteUnprocessed $ map fst4 blocks'
 
   return ()
 
@@ -79,7 +81,7 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::E.Key Block->E.Key BlockDataRef->Block->Block->ContextM ()
+addBlock::E.Key Block->E.Key BlockDataRef->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, Block)
 addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
@@ -107,26 +109,27 @@ addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = d
                          
   db <- getStateDB
 
-  b' <-
+  (bId', bdId', b') <-
     if flags_wrapTransactions
     then do
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-      _ <- putBlocks [newBlock]
+      [(newBId, newBDId)] <- putBlocks [newBlock]
+      deleteUnprocessed [bId]
       deleteBlock bId bdId
 
-      return newBlock
+      return (newBId, newBDId, newBlock)
     else do
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
         liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
-      return b
+      return (bId, bdId, b)
 
   valid <- checkValidity parent b'
   case valid of
     Right () -> return ()
     Left err -> error err
 
-  return ()
+  return (bId', bdId', b')
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
              E.Key Block->E.Key BlockDataRef->m ()
