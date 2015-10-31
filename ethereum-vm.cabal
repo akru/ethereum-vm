@@ -28,9 +28,9 @@ library
                  , cryptohash
                  , either
                  , esqueleto
-                 , ethereum-data-sql
+                 , blockapps-data
                  , ethereum-encryption
-                 , ethereum-merkle-patricia-db
+                 , merkle-patricia-db
                  , ethereum-rlp
                  , ethereum-util
                  , haskoin
@@ -72,8 +72,8 @@ executable ethereum-vm
                  , containers
                  , directory
                  , esqueleto
-                 , ethereum-data-sql
-                 , ethereum-merkle-patricia-db
+                 , blockapps-data
+                 , merkle-patricia-db
                  , ethereum-util
                  , ethereum-vm
                  , filepath
