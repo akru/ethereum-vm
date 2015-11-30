@@ -3,6 +3,7 @@
 
 module Blockchain.VM.VMM where
 
+import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Resource
@@ -95,6 +96,7 @@ getStackItem i = do
 push::Word256Storable a=>a->VMM ()
 push val = do
   state' <- lift get
+  when (length (stack state') > 1024) $ left StackTooLarge
   lift $ put state'{stack = toWord256 val:stack state'}
 
 addDebugCallCreate::DebugCallCreate->VMM ()

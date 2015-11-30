@@ -32,6 +32,7 @@ data VMException =
   DivByZeroException |
   InsufficientFunds |
   AddressDoesNotExist |
+  StackTooLarge |
   CallStackTooDeep |
   InvalidJump deriving (Show)
 
