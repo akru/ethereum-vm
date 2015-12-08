@@ -36,6 +36,8 @@ import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
 import Blockchain.Data.Extra
+import Blockchain.Data.Log
+import Blockchain.Data.LogDB
 import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
@@ -320,11 +322,14 @@ printTransactionMessage t b f = do
     mpdb <- getStateDB
     addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
-    let (resultString, response, theTrace') =
+    let (resultString, response, theTrace', theLogs) =
           case result of 
-            Left err -> (err, "", []) --TODO keep the trace when the run fails
-            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state')
+            Left err -> (err, "", [], []) --TODO keep the trace when the run fails
+            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
 
+    forM_ theLogs $ \log -> do
+      putLogDB $ LogDB (transactionHash t) tAddr (topics log `indexMaybe` 0) (topics log `indexMaybe` 1) (topics log `indexMaybe` 2) (topics log `indexMaybe` 3) (logData log) (bloom log)
+                                 
     _ <- putTransactionResult $
            TransactionResult {
              transactionResultBlockHash=blockHash b,
@@ -350,7 +355,11 @@ printTransactionMessage t b f = do
   return result
 
 
-
+indexMaybe::[a]->Int->Maybe a
+indexMaybe _ i | i < 0 = error "indexMaybe called for i < 0"
+indexMaybe [] _ = Nothing
+indexMaybe (x:_) 0 = Just x
+indexMaybe (_:rest) i = indexMaybe rest (i-1)
 
 
 
