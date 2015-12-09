@@ -135,7 +135,7 @@ getUnprocessedBlocks = do
       E.on (bd E.^. BlockDataRefBlockId E.==. block E.^. BlockId)
       E.on (E.just (block E.^. BlockId) E.==. unprocessed E.?. UnprocessedBlockId)
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
-      E.limit 10000
+      E.limit (fromIntegral flags_queryBlocks)
       return (block E.^. BlockId, bd E.^. BlockDataRefId, block, parent)
       
   return $ map f blocks
