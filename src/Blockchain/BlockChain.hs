@@ -327,8 +327,8 @@ printTransactionMessage t b f = do
             Left err -> (err, "", [], []) --TODO keep the trace when the run fails
             Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
 
-    forM_ theLogs $ \log -> do
-      putLogDB $ LogDB (transactionHash t) tAddr (topics log `indexMaybe` 0) (topics log `indexMaybe` 1) (topics log `indexMaybe` 2) (topics log `indexMaybe` 3) (logData log) (bloom log)
+    forM_ theLogs $ \log' -> do
+      putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
                                  
     _ <- putTransactionResult $
            TransactionResult {
