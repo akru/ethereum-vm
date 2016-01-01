@@ -341,6 +341,7 @@ printTransactionMessage t b f = do
              transactionResultEtherUsed=0,
              transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
              transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
+             transactionResultStateDiff=show addrDiff,
              transactionResultTime=realToFrac $ after - before::Double,
              transactionResultNewStorage="",
              transactionResultDeletedStorage=""
