@@ -55,7 +55,7 @@ getNextBlock b transactions = do
                  blockDataTimestamp = ts,  
                  blockDataExtraData = 0,
                  blockDataMixHash = SHA 0,
-                 blockDataNonce = 5
+                 blockDataNonce = Nothing
                },
                blockReceiptTransactions=transactions,
                blockBlockUncles=[]
