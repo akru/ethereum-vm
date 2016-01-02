@@ -36,7 +36,9 @@ library
                  , haskoin
                  , hflags
                  , mtl
+                 , monad-logger
                  , persistent-postgresql
+                 , postgresql-simple
                  , resourcet
                  , SHA2
                  , time
@@ -47,6 +49,7 @@ library
                    Blockchain.BlockChain
                    Blockchain.VMContext
                    Blockchain.Options
+                   Blockchain.Trigger
                    Blockchain.Verifier
                    Blockchain.VM
                    Blockchain.VM.Code
@@ -81,6 +84,7 @@ executable ethereum-vm
                  , hflags
                  , leveldb-haskell
                  , persistent-postgresql
+                 , postgresql-simple
                  , resourcet
                  , time
                  , transformers

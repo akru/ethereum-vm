@@ -10,6 +10,7 @@ import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
+import Database.PostgreSQL.Simple
 import qualified Database.Esqueleto as E
 import HFlags
 import System.Directory
@@ -26,6 +27,7 @@ import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
 import Blockchain.Options
+import Blockchain.Trigger
 import Blockchain.SHA
 import Blockchain.Verifier
 import Blockchain.VMContext
@@ -97,6 +99,10 @@ main = do
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
       cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+
+      conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
+      liftIO $ setupTrigger conn
+      
       flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
                            hdb
@@ -115,7 +121,7 @@ main = do
 
             when (flags_wrapTransactions) wrapTransactions
 
-            when (length blocks < 100) $ liftIO $ threadDelay 50000
+            when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
   return ()
 
