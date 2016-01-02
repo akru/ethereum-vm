@@ -14,6 +14,7 @@ import qualified Database.Esqueleto as E
 import HFlags
 import System.Directory
 import System.FilePath
+import System.IO
 
 import Blockchain.BlockChain
 import Blockchain.Constants
@@ -83,6 +84,9 @@ wrapTransactions = do
 
 main::IO ()
 main = do
+  hSetBuffering stdout NoBuffering
+  hSetBuffering stderr NoBuffering
+
   _ <- $initHFlags "The Ethereum Haskell Peer"
 
   homeDir <- getHomeDirectory
