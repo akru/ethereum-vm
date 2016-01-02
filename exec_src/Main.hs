@@ -15,6 +15,7 @@ import qualified Database.Esqueleto as E
 import HFlags
 import System.Directory
 import System.FilePath
+import System.IO
 
 import Blockchain.BlockChain
 import Blockchain.Constants
@@ -85,6 +86,9 @@ wrapTransactions = do
 
 main::IO ()
 main = do
+  hSetBuffering stdout NoBuffering
+  hSetBuffering stderr NoBuffering
+
   _ <- $initHFlags "The Ethereum Haskell Peer"
 
   homeDir <- getHomeDirectory
@@ -111,12 +115,12 @@ main = do
                            Nothing
                            M.empty) $ 
           forever $ do
-            liftIO $ putStrLn "Getting Blocks"
+            --liftIO $ putStrLn "Getting Blocks"
             blocks <- getUnprocessedBlocks
-            liftIO $ putStrLn "Getting Transaction Senders"
+            --liftIO $ putStrLn "Getting Transaction Senders"
             transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
             putTransactionMap transactionMap'
-            liftIO $ putStrLn "Adding Blocks"
+            --liftIO $ putStrLn "Adding Blocks"
             addBlocks blocks
 
             when (flags_wrapTransactions) wrapTransactions
