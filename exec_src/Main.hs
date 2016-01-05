@@ -115,12 +115,12 @@ main = do
                            Nothing
                            M.empty) $ 
           forever $ do
-            --liftIO $ putStrLn "Getting Blocks"
+            liftIO $ putStrLn "Getting Blocks"
             blocks <- getUnprocessedBlocks
-            --liftIO $ putStrLn "Getting Transaction Senders"
+            liftIO $ putStrLn "Getting Transaction Senders"
             transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
             putTransactionMap transactionMap'
-            --liftIO $ putStrLn "Adding Blocks"
+            liftIO $ putStrLn "Adding Blocks"
             addBlocks blocks
 
             when (flags_wrapTransactions) wrapTransactions
