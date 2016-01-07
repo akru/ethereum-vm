@@ -6,10 +6,12 @@ import Control.Monad
 import Data.Int
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.Notification
+import Data.ByteString.Char8 (unpack, pack)
 
 waitForNewBlock::Connection->IO ()
 waitForNewBlock conn = do
-  getNotification conn
+  Notification _ notifChannel notifData <- getNotification conn
+  putStr $ "Trigger on " ++ (unpack notifChannel) ++ " data is " ++ (unpack notifData) ++ "\n"
   return ()
                   
 setupTrigger::Connection->IO Int64
