@@ -9,12 +9,8 @@ import Data.ByteString.Char8 (unpack, pack)
 
 waitForNewBlock::Connection->IO ()
 waitForNewBlock conn = do
-<<<<<<< HEAD
   Notification _ notifChannel notifData <- getNotification conn
   putStr $ "Trigger on " ++ (unpack notifChannel) ++ " data is: " ++ (unpack notifData) ++ "\n"
-=======
-  _ <- getNotification conn
->>>>>>> b424aae906a3ae75a4f41d155b8db8c8074e5ab6
   return ()
                   
 setupTrigger::Connection->IO Int64
