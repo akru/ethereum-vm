@@ -2,14 +2,13 @@
 
 module Blockchain.Trigger where
 
-import Control.Monad
 import Data.Int
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.Notification
 
 waitForNewBlock::Connection->IO ()
 waitForNewBlock conn = do
-  getNotification conn
+  _ <- getNotification conn
   return ()
                   
 setupTrigger::Connection->IO Int64
