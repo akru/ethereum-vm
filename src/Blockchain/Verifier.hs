@@ -22,7 +22,7 @@ import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
 --import Blockchain.Mining
-import Blockchain.Options
+import Blockchain.VMOptions
 import Blockchain.SHA
 
 --import Debug.Trace

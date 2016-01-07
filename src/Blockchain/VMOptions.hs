@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Blockchain.Options where
+module Blockchain.VMOptions where
 
 import HFlags
 

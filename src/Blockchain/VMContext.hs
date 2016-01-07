@@ -31,7 +31,7 @@ import Blockchain.DB.HashDB
 import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
 import Blockchain.DB.StorageDB
-import Blockchain.Options
+import Blockchain.VMOptions
 import Blockchain.SHA
 
 --import Debug.Trace

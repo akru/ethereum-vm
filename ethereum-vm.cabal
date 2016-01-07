@@ -48,7 +48,7 @@ library
     exposed-modules: 
                    Blockchain.BlockChain
                    Blockchain.VMContext
-                   Blockchain.Options
+                   Blockchain.VMOptions
                    Blockchain.Trigger
                    Blockchain.Verifier
                    Blockchain.VM

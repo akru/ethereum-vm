@@ -27,7 +27,7 @@ import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
-import Blockchain.Options
+import Blockchain.VMOptions
 import Blockchain.Trigger
 import Blockchain.SHA
 import Blockchain.Verifier
