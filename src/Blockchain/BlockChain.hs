@@ -47,7 +47,7 @@ import Blockchain.DB.StateDB
 import Blockchain.Constants
 import Blockchain.ExtWord
 import Blockchain.Format
-import Blockchain.Options
+import Blockchain.VMOptions
 import Blockchain.Verifier
 import Blockchain.VM
 import Blockchain.VM.Code

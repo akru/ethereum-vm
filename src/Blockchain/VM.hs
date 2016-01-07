@@ -35,7 +35,7 @@ import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.ExtWord
-import Blockchain.Options
+import Blockchain.VMOptions
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VM.Code
