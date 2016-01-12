@@ -5,7 +5,7 @@ module Blockchain.Trigger where
 import Data.Int
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.Notification
-import Data.ByteString.Char8 (unpack, pack)
+import Data.ByteString.Char8 (unpack)
 
 waitForNewBlock::Connection->IO ()
 waitForNewBlock conn = do

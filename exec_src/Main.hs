@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 
-import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State
@@ -105,7 +104,7 @@ main = do
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
 
       conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
-      liftIO $ setupTrigger conn
+      _ <- liftIO $ setupTrigger conn
       
       flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
