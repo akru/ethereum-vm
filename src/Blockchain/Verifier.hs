@@ -77,8 +77,8 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
 checkValidity::Monad m=>Block->Block->ContextM (m ())
 checkValidity parent b = do
   checkParentChildValidity b parent
---  let miningVerified = (verify dummyMiner) MineBlock{sr=stateRoot b, diff=difficulty b, nonce=stateRoot b}
---  unless miningVerified $ fail "block falsly mined, verification failed"
+  let miningVerified = (verify dummyMiner) b
+  unless miningVerified $ fail "block falsly mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
