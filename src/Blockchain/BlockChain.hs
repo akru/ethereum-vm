@@ -47,6 +47,7 @@ import Blockchain.DB.StateDB
 import Blockchain.Constants
 import Blockchain.ExtWord
 import Blockchain.Format
+import Blockchain.SHA
 import Blockchain.VMOptions
 import Blockchain.Verifier
 import Blockchain.VM
@@ -56,11 +57,11 @@ import Blockchain.VM.VMState
 
 --import Debug.Trace
 
-addBlocks::[(E.Key Block, E.Key BlockDataRef, Block, Block)]->ContextM ()
+addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM blocks $ \(bId, bdId, block, parent) -> do
+    forM blocks $ \(bId, bdId, hash, block, parent) -> do
       before <- liftIO $ getPOSIXTime 
       (bId', bdId', block') <- addBlock bId bdId parent block
       after <- liftIO $ getPOSIXTime 

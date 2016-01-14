@@ -117,7 +117,7 @@ main = do
             liftIO $ putStrLn "Getting Blocks"
             blocks <- getUnprocessedBlocks
             liftIO $ putStrLn "Getting Transaction Senders"
-            transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst4 blocks
+            transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
             putTransactionMap transactionMap'
             liftIO $ putStrLn "Adding Blocks"
             addBlocks blocks
@@ -128,10 +128,10 @@ main = do
 
   return ()
 
-fst4::(a, b, c, d)->a
-fst4 (x, _, _, _) = x
+fst5::(a, b, c, d, e)->a
+fst5 (x, _, _, _, _) = x
 
-getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, Block, Block)]
+getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]
 getUnprocessedBlocks = do
   db <- getSQLDB
   blocks <-
@@ -145,13 +145,13 @@ getUnprocessedBlocks = do
       E.on (E.just (block E.^. BlockId) E.==. unprocessed E.?. UnprocessedBlockId)
       E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
       E.limit (fromIntegral flags_queryBlocks)
-      return (block E.^. BlockId, bd E.^. BlockDataRefId, block, parent)
+      return (block E.^. BlockId, bd E.^. BlockDataRefId, bd E.^. BlockDataRefHash, block, parent)
       
   return $ map f blocks
 
   where
-    f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, Block, Block)
-    f (bId, bdId, b, p) = (E.unValue bId, E.unValue bdId, E.entityVal b, E.entityVal p)
+    f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Value SHA, E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)
+    f (bId, bdId, hash, b, p) = (E.unValue bId, E.unValue bdId, E.unValue hash, E.entityVal b, E.entityVal p)
 
 getTransactionsForBlocks::[E.Key Block]->ContextM [(SHA, Address)]
 getTransactionsForBlocks blockHashes = do
