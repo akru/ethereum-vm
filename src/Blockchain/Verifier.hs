@@ -2,8 +2,7 @@
 
 module Blockchain.Verifier (
   checkValidity,
-  isNonceValid,
-  nextDifficulty
+  isNonceValid
   ) where
 
 import Control.Monad
@@ -21,7 +20,8 @@ import Blockchain.Data.Transaction
 import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
---import Blockchain.Mining
+import Blockchain.Mining
+import Blockchain.Mining.Dummy
 import Blockchain.VMOptions
 import Blockchain.SHA
 
@@ -34,22 +34,6 @@ initializeBlockChain = do
   blockDBPut (BL.toStrict $ encode $ blockHash $ genesisBlock) bytes
   detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
 -}
-
-nextDifficulty::Integer->Integer->UTCTime->UTCTime->Integer
-nextDifficulty parentNumber oldDifficulty oldTime newTime =
-  (max nextDiff' minimumDifficulty) + if flags_useTestnet then 0 else expAdjustment
-    where
-      nextDiff' = 
-          if round (utcTimeToPOSIXSeconds newTime) >=
-                 (round (utcTimeToPOSIXSeconds oldTime) + difficultyDurationLimit flags_useTestnet::Integer)
-          then oldDifficulty - oldDifficulty `shiftR` difficultyAdjustment
-          else oldDifficulty + oldDifficulty `shiftR` difficultyAdjustment
-      periodCount = (parentNumber+1) `quot` difficultyExpDiffPeriod
-      expAdjustment =
-        if periodCount > 1
-        then 2^(periodCount - 2)
-        else 0
-
 
 {-
 nextGasLimit::Integer->Integer->Integer
@@ -78,8 +62,8 @@ verifyStateRootExists b = do
 
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
-    unless (blockDataDifficulty c == nextDifficulty (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
+    unless (blockDataDifficulty c == nextDifficulty flags_useTestnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
+             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty flags_useTestnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
     unless (blockDataNumber c == blockDataNumber p + 1) 
              $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
     unless (blockDataGasLimit c <= blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p))
@@ -93,6 +77,8 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
 checkValidity::Monad m=>Block->Block->ContextM (m ())
 checkValidity parent b = do
   checkParentChildValidity b parent
+--  let miningVerified = (verify dummyMiner) MineBlock{sr=stateRoot b, diff=difficulty b, nonce=stateRoot b}
+--  unless miningVerified $ fail "block falsly mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"

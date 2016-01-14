@@ -41,6 +41,7 @@ library
                  , postgresql-simple
                  , resourcet
                  , SHA2
+                 , strato-adit
                  , time
                  , transformers
                  , vector
