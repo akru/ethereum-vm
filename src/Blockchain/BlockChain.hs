@@ -115,10 +115,12 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
   (b', bId', bdID') <-
     if hash' == SHA 0
     then do
+      liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
       [(newBId, newBDId)] <- putBlocks [newBlock]
       deleteBlock bId bdId
-
+      liftIO $ putStrLn "stateRoot has been filled in"
+      
       return (newBlock, newBId, newBDId)
     else do
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
