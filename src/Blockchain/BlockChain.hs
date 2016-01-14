@@ -61,9 +61,9 @@ addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM blocks $ \(bId, bdId, hash, block, parent) -> do
+    forM blocks $ \(bId, bdId, hash', block, parent) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', block') <- addBlock bId bdId parent block
+      (bId', bdId', block') <- addBlock bId bdId hash' parent block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
@@ -84,8 +84,8 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::E.Key Block->E.Key BlockDataRef->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, Block)
-addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::E.Key Block->E.Key BlockDataRef->SHA->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, Block)
+addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
@@ -113,7 +113,7 @@ addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = d
   db <- getStateDB
 
   (b', bId', bdID') <-
-    if flags_wrapTransactions
+    if hash' == SHA 0
     then do
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
       [(newBId, newBDId)] <- putBlocks [newBlock]
@@ -126,7 +126,7 @@ addBlock bId bdId parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = d
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return (b, bId, bdId)
 
-  valid <- checkValidity parent b'
+  valid <- checkValidity (hash' == SHA 0) parent b'
   case valid of
     Right () -> return ()
     Left err -> error err

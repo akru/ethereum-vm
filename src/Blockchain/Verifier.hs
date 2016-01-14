@@ -74,11 +74,12 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_useTestnet::Integer)
     return ()
 
-checkValidity::Monad m=>Block->Block->ContextM (m ())
-checkValidity parent b = do
+checkValidity::Monad m=>Bool->Block->Block->ContextM (m ())
+checkValidity partialBlock parent b = do
   checkParentChildValidity b parent
-  let miningVerified = (verify dummyMiner) b
-  unless miningVerified $ fail "block falsly mined, verification failed"
+  when (not partialBlock) $ do
+    let miningVerified = (verify dummyMiner) b
+    unless miningVerified $ fail "block falsEEEly mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
