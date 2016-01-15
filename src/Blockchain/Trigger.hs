@@ -23,7 +23,7 @@ setupTrigger conn = do
                         \ return null;\n\
                         \end\n\
                         \$$;\n\
-                        \create trigger newBlock after insert on Block for each row execute procedure newBlock();\n\
+                        \create trigger newBlock after insert on Unprocessed for each row execute procedure newBlock();\n\
                         \listen new_block;\n" ()
 
                             

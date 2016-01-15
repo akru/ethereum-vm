@@ -57,24 +57,32 @@ import Blockchain.VM.VMState
 
 import Debug.Trace
 
+third4::(a,b,c,d)->c
+third4 (_, _, x, _) = x
+
 addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
     forM blocks $ \(bId, bdId, hash', block, parent) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', block') <- addBlock bId bdId hash' parent block
+      (bId', bdId', hash', block') <- addBlock bId bdId hash' parent block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
-      return (bId', bdId', block')
+      return (bId', bdId', hash', block')
 
-  let (_, lastBDId, lastBlock) = last ret --last is OK, because we filter out blocks=[] in the addBlocks pattern match
-  replaceBestIfBetter (lastBDId, lastBlock)
+  let fullBlocks = filter ((/= SHA 1) . third4) ret
 
-  let fst3 (x, _, _) = x
+  case fullBlocks of
+   [] -> return ()
+   _ -> do
+     let (_, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
+     replaceBestIfBetter (lastBDId, lastBlock)
 
-  _ <- deleteUnprocessed $ map fst3 ret
+  let fst4 (x, _, _, _) = x
+
+  _ <- deleteUnprocessed $ map fst4 ret
 
   return ()
 
@@ -84,7 +92,7 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::E.Key Block->E.Key BlockDataRef->SHA->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, Block)
+addBlock::E.Key Block->E.Key BlockDataRef->SHA->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
 addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
@@ -132,7 +140,7 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     Right () -> return ()
     Left err -> error err
 
-  return (bId', bdID', b')
+  return (bId', bdID', hash', b')
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
              E.Key Block->E.Key BlockDataRef->m ()
