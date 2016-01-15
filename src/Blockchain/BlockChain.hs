@@ -55,7 +55,7 @@ import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
---import Debug.Trace
+import Debug.Trace
 
 addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]->ContextM ()
 addBlocks [] = return ()
@@ -102,14 +102,13 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
           ((rewardBase flags_useTestnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
     when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
-
   let transactions = blockReceiptTransactions b
 
   addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
-                         
+
   db <- getStateDB
 
   (b', bId', bdID') <-
@@ -117,7 +116,7 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     then do
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-      [(newBId, newBDId)] <- putBlocks [newBlock]
+      [(newBId, newBDId)] <- putBlocks [newBlock] False
       deleteBlock bId bdId
       liftIO $ putStrLn "stateRoot has been filled in"
       
