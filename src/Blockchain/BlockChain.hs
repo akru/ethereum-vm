@@ -123,12 +123,14 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     if hash' == SHA 1
     then do
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
-      let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
-      [(newBId, newBDId)] <- putBlocks [newBlock] True
-      deleteBlock bId bdId
+      --let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
+      --[(newBId, newBDId)] <- putBlocks [newBlock] True
+      --deleteBlock bId bdId
+      updateBlockDataStateRoot bdId (MP.stateRoot db)
       liftIO $ putStrLn "stateRoot has been filled in"
       
-      return (newBlock, newBId, newBDId)
+      --return (newBlock, newBId, newBDId)
+      return (b, bId, bdId)
     else do
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
         liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
@@ -141,6 +143,17 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     Left err -> error err
 
   return (bId', bdID', hash', b')
+
+updateBlockDataStateRoot::HasSQLDB m=>E.Key BlockDataRef->MP.SHAPtr->m ()
+updateBlockDataStateRoot bdid sr = do
+  pool <- getSQLDB
+  runResourceT $ flip SQL.runSqlPool pool $ do
+    E.update $ \bd -> do
+      E.where_ (bd E.^. BlockDataRefId E.==. E.val bdid)
+      E.set bd [ BlockDataRefStateRoot E.=. E.val sr ]
+      return ()               
+
+
 
 deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
              E.Key Block->E.Key BlockDataRef->m ()
