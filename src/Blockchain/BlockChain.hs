@@ -112,7 +112,7 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
   db <- getStateDB
 
   (b', bId', bdID') <-
-    if hash' == SHA 0
+    if hash' == SHA 1
     then do
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlock = b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
@@ -127,7 +127,7 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return (b, bId, bdId)
 
-  valid <- checkValidity (hash' == SHA 0) parent b'
+  valid <- checkValidity (hash' == SHA 1) parent b'
   case valid of
     Right () -> return ()
     Left err -> error err
