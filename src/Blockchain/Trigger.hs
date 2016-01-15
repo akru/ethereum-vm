@@ -16,7 +16,7 @@ waitForNewBlock conn = do
 setupTrigger::Connection->IO Int64
 setupTrigger conn = do
     withTransaction conn $ execute conn
-                        "drop trigger if exists newBlock on Block;\n\
+                        "drop trigger if exists newBlock on Unprocessed;\n\
                         \create or replace function newBlock() returns trigger language plpgsql as $$\
                         \begin\n\
                         \ perform pg_notify('new_block', NULL);\n\
