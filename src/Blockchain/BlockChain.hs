@@ -143,6 +143,8 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
     Right () -> return ()
     Left err -> error err
 
+  liftIO $ putStrLn $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
+
   return (bId', bdID', hash', b')
 
 updateBlockDataStateRoot::HasSQLDB m=>E.Key Block->E.Key BlockDataRef->BlockData->m ()
