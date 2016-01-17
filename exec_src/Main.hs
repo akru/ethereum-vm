@@ -63,26 +63,6 @@ getNextBlock b transactions = do
                blockBlockUncles=[]
              }
 
-
-wrapTransactions::ContextM ()
-wrapTransactions = do
-  transactions <- getUnprocessedTransactions
-  pool <- getSQLDB
-
-  when (not $ null transactions) $ do
-                     bestBlock <-getBestBlock
-                     nextBlock <- liftIO $ getNextBlock bestBlock transactions
-                     [(blockId,_)] <- putBlocks [nextBlock] False
-                     runResourceT $
-                                  flip SQL.runSqlPool pool $ 
-                                       E.update $ \t -> do
-                                         E.set t [ RawTransactionBlockNumber E.=. E.val (fromInteger $ blockDataNumber $ blockBlockData nextBlock),
-                                                   RawTransactionBlockId E.=. E.val (blockId)]
-                                         E.where_ (t E.^. RawTransactionBlockNumber E.==. E.val (-1))
-                     return ()
-
-
-
 main::IO ()
 main = do
   hSetBuffering stdout NoBuffering
@@ -121,8 +101,6 @@ main = do
             putTransactionMap transactionMap'
             liftIO $ putStrLn "Adding Blocks"
             addBlocks blocks
-
-            when (flags_wrapTransactions) wrapTransactions
 
             when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
@@ -170,19 +148,3 @@ getTransactionsForBlocks blockHashes = do
     f::(E.Value SHA, E.Value Address)->(SHA, Address)
     f (h, a) = (E.unValue h, E.unValue a)
 
-getUnprocessedTransactions::ContextM [Transaction]
-getUnprocessedTransactions = do
-  db <- getSQLDB
-  transactions <-
-    runResourceT $
-    flip SQL.runSqlPool db $ 
-    E.select $
-    E.from $ \transaction -> do
-      E.where_ (transaction E.^. RawTransactionBlockNumber E.==. E.val (-1))
-      E.orderBy [E.asc (transaction E.^. RawTransactionNonce)]
-      E.limit 1000
-      return transaction
-      
-  return $ map (rawTX2TX . E.entityVal) transactions
-
-  
