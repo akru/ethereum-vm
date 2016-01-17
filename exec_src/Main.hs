@@ -132,15 +132,16 @@ getUnprocessedBlocks = do
     f (bId, bdId, hash, b, p) = (E.unValue bId, E.unValue bdId, E.unValue hash, E.entityVal b, E.entityVal p)
 
 getTransactionsForBlocks::[E.Key Block]->ContextM [(SHA, Address)]
-getTransactionsForBlocks blockHashes = do
+getTransactionsForBlocks blockIDs = do
   db <- getSQLDB
   blocks <-
     runResourceT $
     flip SQL.runSqlPool db $ 
     E.select $
-    E.from $ \t -> do
-      E.where_ ((t E.^. RawTransactionBlockId) `E.in_` E.valList blockHashes)
-      return (t E.^. RawTransactionTxHash, t E.^. RawTransactionFromAddress)
+    E.from $ \(blockTX `E.InnerJoin` tx) -> do
+      E.on (blockTX E.^. BlockTransactionTransaction E.==. tx E.^. RawTransactionId)
+      E.where_ ((blockTX E.^. BlockTransactionBlockId) `E.in_` E.valList blockIDs)
+      return (tx E.^. RawTransactionTxHash, tx E.^. RawTransactionFromAddress)
       
   return $ map f blocks
 
