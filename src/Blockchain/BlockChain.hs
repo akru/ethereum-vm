@@ -160,32 +160,6 @@ updateBlockDataStateRoot bid bdid newbd = do
       E.set b [ BlockBlockData E.=. E.val newbd ]
       return ()
 
-
-
-deleteBlock::(HasSQLDB m, MonadIO m, MonadResource m)=>
-             E.Key Block->E.Key BlockDataRef->m ()
-deleteBlock bId bdId = do
-  pool <- getSQLDB
-
-  runResourceT $ flip SQL.runSqlPool pool $ do
-             E.delete $
-              E.from $ \t -> do
-                  E.where_ (t E.^. RawTransactionBlockId E.==. E.val bId)
-
-             E.delete $
-              E.from $ \p -> do
-                  E.where_ (p E.^. UnprocessedBlockId E.==. E.val bId)
-
-             E.delete $
-              E.from $ \b -> do
-                  E.where_ (b E.^. BlockDataRefId E.==. E.val bdId)
-
-             E.delete $
-              E.from $ \b -> do
-                  E.where_ (b E.^. BlockId E.==. E.val bId)
-
-  return ()
-
 addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
