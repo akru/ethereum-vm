@@ -74,9 +74,11 @@ addBlocks blocks = do
 
   let fullBlocks = filter ((/= SHA 1) . third4) ret
 
-  -- before we ran only on (last $ lastBlock) but since we can't rely on the ordering, we seemed to have missed
-  -- potential best blocks that were in the middle of the list 
-  mapM_ (\(lastBId, lastBDId, _, lastBlock) -> replaceBestIfBetter (lastBId,lastBDId) lastBlock) fullBlocks
+  case fullBlocks of
+   [] -> return ()
+   _ -> do
+     let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
+     replaceBestIfBetter (lastBId,lastBDId) lastBlock
 
   let fst4 (x, _, _, _) = x
 
