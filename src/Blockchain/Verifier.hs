@@ -77,7 +77,7 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
 checkValidity::Monad m=>Bool->Block->Block->ContextM (m ())
 checkValidity partialBlock parent b = do
   checkParentChildValidity b parent
-  when (not partialBlock) $ do
+  when (flags_miningVerification && not partialBlock) $ do
     let miningVerified = (verify dummyMiner) b
     unless miningVerified $ fail "block falsEEEly mined, verification failed"
   --nIsValid <- nonceIsValid' b
