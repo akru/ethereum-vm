@@ -6,6 +6,7 @@ import Network.Haskoin.Internals
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen
 
+import qualified Blockchain.Colors as CL
 import Blockchain.Data.Code
 import Blockchain.Format
 import Blockchain.Util
@@ -20,6 +21,7 @@ getOperationAt' rom p = opCode2Op $ safeDrop p rom
 
 showCode::Word256->Code->String
 showCode _ (Code bytes) | B.null bytes = ""
+showCode _ (PrecompiledCode x) = CL.blue $ "<PrecompiledCode:" ++ show x ++">"
 showCode lineNumber c@(Code rom) = showHex lineNumber "" ++ " " ++ format (B.pack $ op2OpCode op) ++ " " ++ show (pretty op) ++ "\n" ++  showCode (lineNumber + nextP) (Code (safeDrop nextP rom))
         where
           (op, nextP) = getOperationAt c 0
