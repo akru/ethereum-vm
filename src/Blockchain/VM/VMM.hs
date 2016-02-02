@@ -96,7 +96,7 @@ getStackItem i = do
 push::Word256Storable a=>a->VMM ()
 push val = do
   state' <- lift get
-  when (length (stack state') > 1024) $ left StackTooLarge
+  when (length (stack state') > 1023) $ left StackTooLarge
   lift $ put state'{stack = toWord256 val:stack state'}
 
 addDebugCallCreate::DebugCallCreate->VMM ()
@@ -120,6 +120,11 @@ addLog::Log->VMM ()
 addLog newLog = do
   state' <- lift get
   lift $ put state'{logs=newLog:logs state'}
+
+clearLogs::VMM ()
+clearLogs = do
+  state' <- lift get
+  lift $ put state'{logs=[]}
 
 setPC::Word256->VMM ()
 setPC p = do
