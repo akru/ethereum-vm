@@ -9,6 +9,7 @@ import Control.Monad
 import Data.Binary hiding (get)
 import Data.Bits
 import qualified Data.ByteString.Lazy as BL
+--import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
 
@@ -100,5 +101,6 @@ checkValidity partialBlock parent b = do
 isNonceValid::Transaction->ContextM Bool
 isNonceValid t = do
   tAddr <- getTransactionAddress t
+  --let tAddr = fromJust $ whoSignedThisTransaction t
   addressState <- getAddressState tAddr
   return $ addressStateNonce addressState == transactionNonce t
