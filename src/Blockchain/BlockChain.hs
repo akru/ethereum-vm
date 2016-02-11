@@ -98,16 +98,16 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
   setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parent
-  s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_useTestnet
+  s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
 
   forM_ uncles $ \uncle -> do
-    s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_useTestnet `quot` 32)
+    s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_testnet `quot` 32)
     when (not s2) $ error "addToBalance failed even after a check in addBlock"
         
     s3 <- addToBalance
           (blockDataCoinbase uncle)
-          ((rewardBase flags_useTestnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+          ((rewardBase flags_testnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
     when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
   let transactions = blockReceiptTransactions b
