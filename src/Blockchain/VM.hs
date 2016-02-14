@@ -657,12 +657,16 @@ opGasPriceAndRefund CALL = do
   to <- getStackItem 1::VMM Word256
   val <- getStackItem 2::VMM Word256
 
-  toAccountExists <- addressStateExists $ Address $ fromIntegral to
+  let toAddr = Address $ fromIntegral to
+
+  toAccountExists <- addressStateExists toAddr
+
+  self <- getEnvVar envOwner -- if an account being created calls itself, the go client doesn't charge the gCALLNEWACCOUNT fee, so we need to check if that case is occurring here
 
   return $ (
     fromIntegral gas +
     fromIntegral gCALL +
-    (if toAccountExists then 0 else fromIntegral gCALLNEWACCOUNT) +
+    (if toAccountExists || toAddr == self then 0 else fromIntegral gCALLNEWACCOUNT) +
 --                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
     (if val > 0 then fromIntegral gCALLVALUETRANSFER else 0),
     0)
