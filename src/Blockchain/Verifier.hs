@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Time
 import Data.Time.Clock.POSIX
 
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.VMContext
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -61,23 +62,27 @@ verifyStateRootExists b = do
     Nothing -> return False
     Just _ -> return True
 
-checkParentChildValidity::(Monad m)=>Block->Block->m ()
-checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
-    unless (blockDataDifficulty c == nextDifficulty flags_testnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty flags_testnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
-    unless (blockDataNumber c == blockDataNumber p + 1) 
-             $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
-    unless (blockDataGasLimit c <= blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p))
-             $ fail $ "Block gasLimit is too high: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
-    unless (blockDataGasLimit c >= blockDataGasLimit p - nextGasLimitDelta (blockDataGasLimit p))
-             $ fail $ "Block gasLimit is too low: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p -  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
+checkParentChildValidity::(Monad m)=>Block->BlockSummary->m ()
+checkParentChildValidity Block{blockBlockData=c} parentBSum = do
+    unless (blockDataDifficulty c == nextDifficulty flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
+             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++
+                   "', expected '" ++
+                   show (nextDifficulty flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c)) ++ "'"
+    unless (blockDataNumber c == bSumNumber parentBSum + 1) 
+             $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (bSumNumber parentBSum + 1) ++ "'"
+    unless (blockDataGasLimit c <= bSumGasLimit parentBSum +  nextGasLimitDelta (bSumGasLimit parentBSum))
+             $ fail $ "Block gasLimit is too high: got '" ++ show (blockDataGasLimit c) ++
+                   "', should be less than '" ++ show (bSumGasLimit parentBSum +  nextGasLimitDelta (bSumGasLimit parentBSum)) ++ "'"
+    unless (blockDataGasLimit c >= bSumGasLimit parentBSum - nextGasLimitDelta (bSumGasLimit parentBSum))
+             $ fail $ "Block gasLimit is too low: got '" ++ show (blockDataGasLimit c) ++
+                   "', should be less than '" ++ show (bSumGasLimit parentBSum -  nextGasLimitDelta (bSumGasLimit parentBSum)) ++ "'"
     unless (blockDataGasLimit c >= minGasLimit flags_testnet)
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
-checkValidity::Monad m=>Bool->Block->Block->ContextM (m ())
-checkValidity partialBlock parent b = do
-  checkParentChildValidity b parent
+checkValidity::Monad m=>Bool->BlockSummary->Block->ContextM (m ())
+checkValidity partialBlock parentBSum b = do
+  checkParentChildValidity b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
     let miningVerified = (verify dummyMiner) b
     unless miningVerified $ fail "block falsEEEly mined, verification failed"

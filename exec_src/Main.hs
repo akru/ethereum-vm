@@ -106,7 +106,10 @@ main = do
                      transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
                      putTransactionMap transactionMap'
                      liftIO $ putStrLn "Adding Blocks"
-                     addBlocks blocks
+
+                     putBlocksKafka $ map (\(_, _, _, b, _) -> b) blocks
+                            
+                     addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Just v5)) blocks
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
@@ -154,4 +157,5 @@ getTransactionsForBlocks blockIDs = do
   where
     f::(E.Value SHA, E.Value Address)->(SHA, Address)
     f (h, a) = (E.unValue h, E.unValue a)
+
 

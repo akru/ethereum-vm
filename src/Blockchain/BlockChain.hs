@@ -28,6 +28,7 @@ import qualified Database.Persist.Postgresql as SQL
 import qualified Database.Esqueleto as E
 import Blockchain.DB.SQLDB
 
+import Blockchain.BlockSummaryCacheDB
 import qualified Blockchain.Colors as CL
 import Blockchain.VMContext
 import Blockchain.Data.Address
@@ -63,13 +64,13 @@ import Debug.Trace
 third4::(a,b,c,d)->c
 third4 (_, _, x, _) = x
 
-addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]->ContextM ()
+addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Maybe Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM blocks $ \(bId, bdId, hash', block, parent) -> do
+    forM blocks $ \(bId, bdId, hash', block, maybeParent) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', hash', block') <- addBlock bId bdId hash' parent block
+      (bId', bdId', hash', block') <- addBlock bId bdId hash' maybeParent block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
@@ -95,12 +96,16 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::E.Key Block->E.Key BlockDataRef->SHA->Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
-addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::E.Key Block->E.Key BlockDataRef->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
+addBlock bId bdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+  let bSum = case maybeParent of
+               Nothing -> do
+                 undefined
+               Just parent -> blockToBSum parent
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
-  setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parent
+  setStateDBStateRoot $ bSumStateRoot bSum
   s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
 
@@ -141,7 +146,7 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return (b, bId, bdId)
 
-  valid <- checkValidity (hash' == SHA 1) parent b'
+  valid <- checkValidity (hash' == SHA 1) bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err

@@ -3,6 +3,7 @@
 module Blockchain.BlockSummaryCacheDB (
     BlockSummaryCacheT,
     BlockSummary(..),
+    blockToBSum,
     withBlockSummaryCacheDB,
     getBSum,
     putBSum
@@ -17,8 +18,10 @@ import Control.Monad.Trans.State
 import Data.Binary
 import qualified Data.ByteString.Lazy as BL
 import Data.Maybe
+import Data.Time
 import qualified Database.LevelDB as LDB
     
+import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.SHA
@@ -34,8 +37,23 @@ withBlockSummaryCacheDB filename f = do
   runBlockSummaryCacheDBT f db
 
 data BlockSummary = BlockSummary {
+      bSumDifficulty::Integer,
       bSumTotalDifficulty::Int,
-      bSumStateRoot::MP.SHAPtr
+      bSumStateRoot::MP.SHAPtr,
+      bSumGasLimit::Integer,
+      bSumTimestamp::UTCTime,
+      bSumNumber::Integer
+    }
+
+blockToBSum::Block->BlockSummary
+blockToBSum b = 
+    BlockSummary {
+      bSumDifficulty = blockDataDifficulty $ blockBlockData b,
+      bSumTotalDifficulty = 0, -- blockDataTotalDifficulty $ blockBlockData b,
+      bSumStateRoot = blockDataStateRoot $ blockBlockData b,
+      bSumGasLimit = blockDataGasLimit $ blockBlockData b,
+      bSumTimestamp = blockDataTimestamp $ blockBlockData b,
+      bSumNumber = blockDataNumber $ blockBlockData b
     }
 
 instance RLPSerializable BlockSummary where
