@@ -107,8 +107,9 @@ main = do
                      putTransactionMap transactionMap'
                      liftIO $ putStrLn "Adding Blocks"
 
-                     putBlocksKafka $ map (\(_, _, _, b, _) -> b) blocks
-                            
+                     forM_ blocks $ \(_, _, _, b, _) -> do
+                       putBSum (blockHash b) (blockToBSum b)                            
+                     --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Nothing)) blocks
                      addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Just v5)) blocks
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
