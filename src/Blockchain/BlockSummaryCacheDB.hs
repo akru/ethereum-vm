@@ -19,11 +19,14 @@ import Data.Binary
 import qualified Data.ByteString.Lazy as BL
 import Data.Maybe
 import Data.Time
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as LDB
     
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.Format
 import Blockchain.SHA
                 
 class HasBlockSummaryCacheDB m where
@@ -57,13 +60,30 @@ blockToBSum b =
     }
 
 instance RLPSerializable BlockSummary where
-    rlpEncode = undefined
-    rlpDecode = undefined
+    rlpEncode (BlockSummary d td sr gl ts n) =
+        RLPArray [
+                  rlpEncode d,
+                  rlpEncode $ toInteger td,
+                  rlpEncode sr,
+                  rlpEncode gl,
+                  rlpEncode (round $ utcTimeToPOSIXSeconds ts::Integer),
+                  rlpEncode n
+                 ]
+    rlpDecode (RLPArray [d, td, sr, gl, ts, n]) =
+        BlockSummary {
+          bSumDifficulty = rlpDecode d,
+          bSumTotalDifficulty = fromInteger $ rlpDecode td,
+          bSumStateRoot = rlpDecode sr,
+          bSumGasLimit = rlpDecode gl,
+          bSumTimestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode ts,
+          bSumNumber = rlpDecode n
+        }
+
                   
 getBSum::(MonadResource m, HasBlockSummaryCacheDB m)=>SHA->m BlockSummary
 getBSum blockHash = do
   db <- getBlockSummaryCacheDB
-  fmap (rlpDecode . rlpDeserialize . fromMaybe (error "missing value in block summary DB")) $ LDB.get db LDB.defaultReadOptions $ BL.toStrict $ encode blockHash
+  fmap (rlpDecode . rlpDeserialize . fromMaybe (error $ "missing value in block summary DB: " ++ format blockHash)) $ LDB.get db LDB.defaultReadOptions $ BL.toStrict $ encode blockHash
 
 putBSum::(MonadResource m, HasBlockSummaryCacheDB m)=>SHA->BlockSummary->m ()
 putBSum blockHash bSum = do
