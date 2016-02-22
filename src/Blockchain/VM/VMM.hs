@@ -11,7 +11,7 @@ import Control.Monad.Trans.State
 import qualified Data.ByteString as B
 import qualified Data.Set as S
 
-import Blockchain.VMContext
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
@@ -25,9 +25,10 @@ import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
+import Blockchain.VMContext
 import Blockchain.SHA
 
-type VMM = EitherT VMException (StateT VMState (ResourceT IO))
+type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO)))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
 --TODO- Do I really need this?  Is it bad that it is undefined?
