@@ -30,7 +30,7 @@ import Blockchain.DB.SQLDB
 
 import Blockchain.BlockSummaryCacheDB
 import qualified Blockchain.Colors as CL
-import Blockchain.VMContext
+import Blockchain.Constants
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -46,10 +46,10 @@ import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
-import Blockchain.Constants
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
+import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verifier
 import Blockchain.VM
@@ -98,10 +98,10 @@ setTitle value = do
 
 addBlock::E.Key Block->E.Key BlockDataRef->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
 addBlock bId bdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
-  let bSum = case maybeParent of
+  bSum <- case maybeParent of
                Nothing -> do
-                 undefined
-               Just parent -> blockToBSum parent
+                 getBSum $ blockDataParentHash bd
+               Just parent -> return $ blockToBSum parent
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
