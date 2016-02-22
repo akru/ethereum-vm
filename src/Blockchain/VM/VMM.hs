@@ -11,7 +11,7 @@ import Control.Monad.Trans.State
 import qualified Data.ByteString as B
 import qualified Data.Set as S
 
-import Blockchain.VMContext
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
@@ -25,9 +25,10 @@ import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
+import Blockchain.VMContext
 import Blockchain.SHA
 
-type VMM = EitherT VMException (StateT VMState (ResourceT IO))
+type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO)))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
 --TODO- Do I really need this?  Is it bad that it is undefined?
@@ -96,7 +97,7 @@ getStackItem i = do
 push::Word256Storable a=>a->VMM ()
 push val = do
   state' <- lift get
-  when (length (stack state') > 1024) $ left StackTooLarge
+  when (length (stack state') > 1023) $ left StackTooLarge
   lift $ put state'{stack = toWord256 val:stack state'}
 
 addDebugCallCreate::DebugCallCreate->VMM ()
@@ -120,6 +121,11 @@ addLog::Log->VMM ()
 addLog newLog = do
   state' <- lift get
   lift $ put state'{logs=newLog:logs state'}
+
+clearLogs::VMM ()
+clearLogs = do
+  state' <- lift get
+  lift $ put state'{logs=[]}
 
 setPC::Word256->VMM ()
 setPC p = do

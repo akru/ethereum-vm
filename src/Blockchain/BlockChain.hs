@@ -101,16 +101,16 @@ addBlock bId bdId hash' parent b@Block{blockBlockData=bd, blockBlockUncles=uncle
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
 
   setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parent
-  s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_useTestnet
+  s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
 
   forM_ uncles $ \uncle -> do
-    s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_useTestnet `quot` 32)
+    s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_testnet `quot` 32)
     when (not s2) $ error "addToBalance failed even after a check in addBlock"
         
     s3 <- addToBalance
           (blockDataCoinbase uncle)
-          ((rewardBase flags_useTestnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+          ((rewardBase flags_testnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
     when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
   let transactions = blockReceiptTransactions b
@@ -169,7 +169,7 @@ addTransactions b blockGas (t:rest) = do
 
   result <-
     printTransactionMessage t b $
-      runEitherT $ addTransaction b blockGas t
+      runEitherT $ addTransaction False b blockGas t
 
   (_, remainingBlockGas) <-
     case result of
@@ -180,8 +180,9 @@ addTransactions b blockGas (t:rest) = do
 
   addTransactions b remainingBlockGas rest
 
-addTransaction::Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
-addTransaction b remainingBlockGas t = do
+addTransaction::Bool->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
+addTransaction isRunningTests' b remainingBlockGas t = do
+  --let tAddr = fromJust $ whoSignedThisTransaction t
   tAddr <- lift $ getTransactionAddress t
 
   nonceValid <- lift $ isNonceValid t
@@ -215,7 +216,7 @@ addTransaction b remainingBlockGas t = do
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
+        (result, newVMState') <- lift $ runCodeForTransaction isRunningTests' b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
         s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
         when (not s1) $ error "addToBalance failed even after a check in addBlock"
@@ -248,7 +249,6 @@ addTransaction b remainingBlockGas t = do
                vmException=Just InsufficientFunds,
                vmGasRemaining=0,
                refund=0,
-               debugCallCreates=Nothing,
                suicideList=S.empty,
                logs=[],
                returnVal=Nothing,
@@ -259,24 +259,26 @@ addTransaction b remainingBlockGas t = do
                callDepth=undefined,
                done=undefined,
                theTrace=undefined,
-               environment=undefined
+               environment=undefined,
+               isRunningTests=isRunningTests',
+               debugCallCreates=Nothing
                },
             remainingBlockGas
           )
 
-runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX ut = do
+runCodeForTransaction::Bool->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction isRunningTests' b availableGas tAddr newAddress ut | isContractCreationTX ut = do
   when flags_debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   (result, vmState) <-
-    create S.empty b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
+    create isRunningTests' S.empty b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction b availableGas tAddr owner ut = do --MessageTX
+runCodeForTransaction isRunningTests' b availableGas tAddr owner ut = do --MessageTX
   when flags_debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
-  call S.empty b 0 owner owner tAddr
+  call isRunningTests' S.empty b 0 owner owner tAddr
           (fromIntegral $ transactionValue ut) (fromIntegral $ transactionGasPrice ut)
           (transactionData ut) (fromIntegral availableGas) tAddr
 
@@ -303,6 +305,7 @@ intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrD
 printTransactionMessage::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
 printTransactionMessage t b f = do
   tAddr <- getTransactionAddress t
+  --let tAddr = fromJust $ whoSignedThisTransaction t
 
   nonce <- fmap addressStateNonce $ getAddressState tAddr
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="

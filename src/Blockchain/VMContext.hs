@@ -21,6 +21,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -46,7 +47,7 @@ data Context =
     transactionMap::M.Map SHA Address
     }
 
-type ContextM = StateT Context (ResourceT IO)
+type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))
 
 instance HasStateDB ContextM where
   getStateDB = do

@@ -2,7 +2,9 @@
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.State
+import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Resource
 import Data.Time.Clock
 import qualified Data.ByteString as B
@@ -16,6 +18,7 @@ import System.Directory
 import System.FilePath
 import System.IO
 
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.BlockChain
 import Blockchain.Constants
 import Blockchain.Data.Address
@@ -50,7 +53,7 @@ getNextBlock b transactions = do
                  blockDataTransactionsRoot = MP.emptyTriePtr,
                  blockDataReceiptsRoot = MP.emptyTriePtr,
                  blockDataLogBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
-                 blockDataDifficulty = nextDifficulty flags_useTestnet (blockDataNumber bd) (blockDataDifficulty bd) (blockDataTimestamp bd) ts,
+                 blockDataDifficulty = nextDifficulty flags_testnet (blockDataNumber bd) (blockDataDifficulty bd) (blockDataTimestamp bd) ts,
                  blockDataNumber = blockDataNumber bd + 1,
                  blockDataGasLimit = blockDataGasLimit bd,
                  blockDataGasUsed = 0,
@@ -85,24 +88,27 @@ main = do
 
       conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
       _ <- liftIO $ setupTrigger conn
-      
-      flip runStateT (Context
+
+      withBlockSummaryCacheDB "blocksummarycachedb" $ 
+           flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
                            hdb
                            cdb
                            (sqlDB' dbs)
                            Nothing
                            M.empty) $ 
-          forever $ do
-            liftIO $ putStrLn "Getting Blocks"
-            blocks <- getUnprocessedBlocks
-            liftIO $ putStrLn "Getting Transaction Senders"
-            transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
-            putTransactionMap transactionMap'
-            liftIO $ putStrLn "Adding Blocks"
-            addBlocks blocks
+           forever $ do
+                     --blockcachedb <- getBlockSummaryCacheDB
+                     --lift $ DB.put blockcachedb DB.defaultWriteOptions "blockcachedbkey" "blockcachedbval"
+                     liftIO $ putStrLn "Getting Blocks"
+                     blocks <- getUnprocessedBlocks
+                     liftIO $ putStrLn "Getting Transaction Senders"
+                     transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
+                     putTransactionMap transactionMap'
+                     liftIO $ putStrLn "Adding Blocks"
+                     addBlocks blocks
 
-            when (length blocks < 100) $ liftIO $ waitForNewBlock conn
+                     when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
   return ()
 

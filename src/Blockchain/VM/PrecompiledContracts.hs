@@ -6,6 +6,7 @@ module Blockchain.VM.PrecompiledContracts (
 
 import Prelude hiding (LT, GT, EQ)
 
+import Control.Monad.IO.Class
 import qualified Codec.Digest.SHA as SHA2
 import qualified Crypto.Hash.RIPEMD160 as RIPEMD
 import Data.Binary hiding (get, put)
@@ -13,6 +14,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Network.Haskoin.Internals (Signature(..))
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Numeric
 
 import Blockchain.Data.Address
 import Blockchain.ExtendedECDSA
@@ -35,7 +37,7 @@ ecdsaRecover input =
      case (v >= 27, v <= 28, maybePubKey) of
        (True, True, Just pubKey) ->
          B.pack [0,0,0,0,0,0,0,0,0,0,0,0] `B.append` BL.toStrict (encode $ pubKey2Address pubKey)
-       _ -> B.pack (replicate 32 0)
+       _ -> B.empty -- B.pack (replicate 32 0)
 
 ripemd::B.ByteString->B.ByteString
 ripemd input =
@@ -52,7 +54,7 @@ callPrecompiledContract 0 _ = return B.empty
 
 callPrecompiledContract 1 inputData = do
   useGas gECRECOVER
-  return $ ecdsaRecover inputData
+  return $ ecdsaRecover $ inputData `B.append` B.replicate 128 0 --need to right pad with zeros to get the full value if the input isn't large enough....  Since extra bytes will be cut off, it doesn't hurt to just add this everywhere
 
 callPrecompiledContract 2 inputData = do
   useGas $ gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))

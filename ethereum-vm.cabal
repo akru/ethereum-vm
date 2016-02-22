@@ -7,7 +7,7 @@ license-file:  LICENSE
 maintainer:    jamshidnh@gmail.com
 synopsis: A Haskell version of an Ethereum client
 category:      Data Structures
-license: BSD3
+license: Apache-2.0
 description:  
     The client described in the Ethereum Yellowpaper
 
@@ -24,19 +24,21 @@ library
                  , aeson
                  , base16-bytestring
                  , binary
+                 , blockapps-data
+                 , blockapps-util
                  , bytestring
                  , containers
                  , cryptohash
                  , either
                  , esqueleto
-                 , blockapps-data
                  , ethereum-encryption
-                 , merkle-patricia-db
                  , ethereum-rlp
-                 , blockapps-util
                  , haskoin
                  , hflags
+                 , leveldb-haskell
+                 , merkle-patricia-db
                  , mtl
+                 , monad-control
                  , monad-logger
                  , persistent-postgresql
                  , postgresql-simple
@@ -45,9 +47,11 @@ library
                  , strato-adit
                  , time
                  , transformers
+                 , transformers-base
                  , vector
                  , ansi-wl-pprint
     exposed-modules: 
+                   Blockchain.BlockSummaryCacheDB
                    Blockchain.BlockChain
                    Blockchain.VMContext
                    Blockchain.VMOptions
@@ -85,6 +89,7 @@ executable ethereum-vm
                  , haskoin
                  , hflags
                  , leveldb-haskell
+                 , mtl
                  , persistent-postgresql
                  , postgresql-simple
                  , resourcet
