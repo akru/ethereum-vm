@@ -15,6 +15,7 @@ import Control.Monad.Trans.Either
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy as BL
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
@@ -54,6 +55,8 @@ import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
+
+import qualified Data.Aeson as Aeson (encode)
 
 import Debug.Trace
 
@@ -345,7 +348,7 @@ printTransactionMessage t b f = do
              transactionResultEtherUsed=0,
              transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
              transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
-             transactionResultStateDiff=show addrDiff,
+             transactionResultStateDiff=BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
              transactionResultTime=realToFrac $ after - before::Double,
              transactionResultNewStorage="",
              transactionResultDeletedStorage=""
