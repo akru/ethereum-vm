@@ -59,22 +59,22 @@ import Blockchain.VM.VMState
 
 import qualified Data.Aeson as Aeson (encode)
 
-import Debug.Trace
+--import Debug.Trace
 
 third4::(a,b,c,d)->c
 third4 (_, _, x, _) = x
 
-addBlocks::[(E.Key Block, E.Key BlockDataRef, SHA, Block, Maybe Block)]->ContextM ()
+addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block, Maybe Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
     forM blocks $ \(bId, bdId, hash', block, maybeParent) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', hash', block') <- addBlock bId bdId hash' maybeParent block
+      (bId', bdId', hash'', block') <- addBlock bId bdId hash' maybeParent block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
-      return (bId', bdId', hash', block')
+      return (bId', bdId', hash'', block')
 
   let fullBlocks = filter ((/= SHA 1) . third4) ret
 
@@ -96,8 +96,8 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::E.Key Block->E.Key BlockDataRef->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
-addBlock bId bdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
+addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   bSum <- case maybeParent of
                Nothing -> do
                  getBSum $ blockDataParentHash bd
@@ -130,6 +130,8 @@ addBlock bId bdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=
   (b', bId', bdID') <-
     if hash' == SHA 1
     then do
+      let bId = fromMaybe (error "you can't currently run mining and kafka at the same time") maybeBId
+          bdId = fromMaybe (error "you can't currently run mining and kafka at the same time") maybeBdId
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}
           newBlock = b{blockBlockData = newBlockData}
@@ -144,7 +146,7 @@ addBlock bId bdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
         liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
-      return (b, bId, bdId)
+      return (b, fromMaybe (error "you can't use sqlDiff and kafka at the same time") maybeBId, fromMaybe (error "you can't use sqlDiff and kafka at the same time") maybeBdId)
 
   valid <- checkValidity (hash' == SHA 1) bSum b'
   case valid of
