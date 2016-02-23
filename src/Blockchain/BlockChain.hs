@@ -64,6 +64,9 @@ import qualified Data.Aeson as Aeson (encode)
 third4::(a,b,c,d)->c
 third4 (_, _, x, _) = x
 
+first5::(a, b, c, d, e)->a
+first5 (x, _, _, _, _) = x
+                      
 addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block, Maybe Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
@@ -78,17 +81,18 @@ addBlocks blocks = do
 
   let fullBlocks = filter ((/= SHA 1) . third4) ret
 
-  case fullBlocks of
-   [] -> return ()
-   _ -> do
-     let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
-     replaceBestIfBetter (lastBId,lastBDId) lastBlock
+  when (isJust $ first5 $ head blocks) $ do
+                     case fullBlocks of
+                       [] -> return ()
+                       _ -> do
+                         let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
+                         replaceBestIfBetter (lastBId,lastBDId) lastBlock
 
-  let fst4 (x, _, _, _) = x
+                     let fst4 (x, _, _, _) = x
 
-  _ <- deleteUnprocessed $ map fst4 ret
+                     _ <- deleteUnprocessed $ map fst4 ret
 
-  return ()
+                     return ()
 
 
 setTitle::String->IO()
