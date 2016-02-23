@@ -6,6 +6,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
+import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
 import qualified Database.LevelDB as DB
@@ -33,6 +34,7 @@ import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
+import Blockchain.Format
 import Blockchain.VMOptions
 import Blockchain.Trigger
 import Blockchain.SHA
@@ -91,6 +93,8 @@ main = do
       conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
       _ <- liftIO $ setupTrigger conn
 
+      offsetIORef <- liftIO $ newIORef 0
+           
       withBlockSummaryCacheDB "blocksummarycachedb" $ 
            flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
@@ -109,14 +113,18 @@ main = do
                      putTransactionMap transactionMap'
                      liftIO $ putStrLn "Adding Blocks"
 
-                     blocks <- liftIO getUnprocessedKafkaBlocks
+                     blocks <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
                             
-                     liftIO $ print blocks
+                     liftIO $ putStrLn $ "blocks: " ++ unlines (map format blocks)
                             
-                     forM_ blocks' $ \(_, _, _, b, _) -> do
+--                     forM_ blocks' $ \(_, _, _, b, _) -> do
+--                       liftIO $ putStrLn $ "putting " ++ format (blockHash b)
+--                       putBSum (blockHash b) (blockToBSum b)
+                     forM_ blocks $ \b -> do
+                       liftIO $ putStrLn $ "putting " ++ format (blockHash b)
                        putBSum (blockHash b) (blockToBSum b)
-                     --addBlocks $ map (\(_, _, v3, v4, _) -> (Nothing, Nothing, blockHash v4, v4, Nothing)) blocks'
-                     addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
+                     addBlocks $ map (\(_, _, _, v4, _) -> (Nothing, Nothing, blockHash v4, v4, Nothing)) blocks'
+                     --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
@@ -125,22 +133,27 @@ main = do
 fst5::(a, b, c, d, e)->a
 fst5 (x, _, _, _, _) = x
 
-getUnprocessedKafkaBlocks::IO [Block]
-getUnprocessedKafkaBlocks = do
+getUnprocessedKafkaBlocks::IORef Integer->IO [Block]
+getUnprocessedKafkaBlocks offsetIORef = do
   ret <-
       runKafka (mkKafkaState "qqqqkafkaclientidqqqq" ("127.0.0.1", 9092)) $ do
                               stateRequiredAcks .= -1
                               stateWaitSize .= 1
                               stateWaitTime .= 100000
                               liftIO $ putStrLn $ "about to get offset"
-                              offset <- getLastOffset LatestTime 0 "thetopic"
+                              --offset <- getLastOffset LatestTime 0 "thetopic"
                               --let offset = 0
+                              offset <- liftIO $ readIORef offsetIORef
                               liftIO $ putStrLn $ "offset: " ++ show offset
-                              result <- fetch offset 0 "thetopic"
+                              result <- fetch (Offset $ fromIntegral offset) 0 "thetopic"
 
+                                        
                               let qq = concat $ map (map (_kafkaByteString . fromJust . _valueBytes . fifth5 . _messageFields .  _setMessage)) $ map _messageSetMembers $ map fourth4 $ head $ map snd $ _fetchResponseFields result
 
-                              liftIO $ putStrLn $ "fetch response: " ++ show (qq)
+                              liftIO $ writeIORef offsetIORef (offset + fromIntegral (length qq))
+                                       
+                              --liftIO $ putStrLn $ "fetch response: " ++ show (qq)
+                                     
                               return $ fmap (rlpDecode . rlpDeserialize) qq
 
   case ret of
