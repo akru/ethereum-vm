@@ -115,7 +115,7 @@ main = do
                             
                      forM_ blocks' $ \(_, _, _, b, _) -> do
                        putBSum (blockHash b) (blockToBSum b)
-                     --addBlocks $ map (\(_, _, v3, v4, _) -> (Nothing, Nothing, v3, v4, Nothing)) blocks'
+                     --addBlocks $ map (\(_, _, v3, v4, _) -> (Nothing, Nothing, blockHash v4, v4, Nothing)) blocks'
                      addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
