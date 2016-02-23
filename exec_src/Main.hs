@@ -1,19 +1,24 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 
+
+import Control.Lens hiding (Context)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Resource
-import Data.Time.Clock
-import qualified Data.ByteString as B
+import Data.Maybe
 import qualified Data.Map as M
 import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
 import Database.PostgreSQL.Simple
 import qualified Database.Esqueleto as E
 import HFlags
+
+import Network.Kafka
+import Network.Kafka.Consumer
+--import Network.Kafka.Producer
+import Network.Kafka.Protocol
+                    
 import System.Directory
 import System.FilePath
 import System.IO
@@ -24,21 +29,16 @@ import Blockchain.Constants
 import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
-import Blockchain.DB.DetailsDB
-import Blockchain.Data.Transaction
+import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
 import Blockchain.VMOptions
 import Blockchain.Trigger
 import Blockchain.SHA
-import Blockchain.Verifier
 import Blockchain.VMContext
-import qualified Network.Haskoin.Internals as H
 
-coinbasePrvKey::H.PrvKey
-Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
-
+{-
 getNextBlock::Block->[Transaction]->IO Block
 getNextBlock b transactions = do
   ts <- getCurrentTime
@@ -65,6 +65,8 @@ getNextBlock b transactions = do
                blockReceiptTransactions=transactions,
                blockBlockUncles=[]
              }
+-}
+
 
 main::IO ()
 main = do
@@ -101,16 +103,20 @@ main = do
                      --blockcachedb <- getBlockSummaryCacheDB
                      --lift $ DB.put blockcachedb DB.defaultWriteOptions "blockcachedbkey" "blockcachedbval"
                      liftIO $ putStrLn "Getting Blocks"
-                     blocks <- getUnprocessedBlocks
+                     blocks' <- getUnprocessedBlocks
                      liftIO $ putStrLn "Getting Transaction Senders"
-                     transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
+                     transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks'
                      putTransactionMap transactionMap'
                      liftIO $ putStrLn "Adding Blocks"
 
-                     forM_ blocks $ \(_, _, _, b, _) -> do
-                       putBSum (blockHash b) (blockToBSum b)                            
-                     --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Nothing)) blocks
-                     addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Just v5)) blocks
+                     blocks <- liftIO getUnprocessedKafkaBlocks
+                            
+                     liftIO $ print blocks
+                            
+                     forM_ blocks' $ \(_, _, _, b, _) -> do
+                       putBSum (blockHash b) (blockToBSum b)
+                     addBlocks $ map (\(v1, v2, v3, v4, _) -> (v1, v2, v3, v4, Nothing)) blocks'
+                     --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (v1, v2, v3, v4, Just v5)) blocks
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
@@ -119,6 +125,28 @@ main = do
 fst5::(a, b, c, d, e)->a
 fst5 (x, _, _, _, _) = x
 
+getUnprocessedKafkaBlocks::IO [Block]
+getUnprocessedKafkaBlocks = do
+  ret <-
+      runKafka (mkKafkaState "qqqqkafkaclientidqqqq" ("127.0.0.1", 9092)) $ do
+                              stateRequiredAcks .= -1
+                              stateWaitSize .= 1
+                              stateWaitTime .= 100000
+                              liftIO $ putStrLn $ "about to get offset"
+                              offset <- getLastOffset LatestTime 0 "thetopic"
+                              --let offset = 0
+                              liftIO $ putStrLn $ "offset: " ++ show offset
+                              result <- fetch offset 0 "thetopic"
+
+                              let qq = concat $ map (map (_kafkaByteString . fromJust . _valueBytes . fifth5 . _messageFields .  _setMessage)) $ map _messageSetMembers $ map fourth4 $ head $ map snd $ _fetchResponseFields result
+
+                              liftIO $ putStrLn $ "fetch response: " ++ show (qq)
+                              return $ fmap (rlpDecode . rlpDeserialize) qq
+
+  case ret of
+    Left e -> error $ show e
+    Right v -> return v
+                                     
 getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]
 getUnprocessedBlocks = do
   db <- getSQLDB
@@ -139,8 +167,15 @@ getUnprocessedBlocks = do
 
   where
     f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Value SHA, E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)
-    f (bId, bdId, hash, b, p) = (E.unValue bId, E.unValue bdId, E.unValue hash, E.entityVal b, E.entityVal p)
+    f (bId, bdId, hash', b, p) = (E.unValue bId, E.unValue bdId, E.unValue hash', E.entityVal b, E.entityVal p)
 
+fourth4::(a, b, c, d)->d
+fourth4 (_, _, _, x) = x
+
+fifth5::(a, b, c, d, e)->e
+fifth5 (_, _, _, _, x) = x
+                                                             
+                                
 getTransactionsForBlocks::[E.Key Block]->ContextM [(SHA, Address)]
 getTransactionsForBlocks blockIDs = do
   db <- getSQLDB

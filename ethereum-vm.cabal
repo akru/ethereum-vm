@@ -84,11 +84,14 @@ executable ethereum-vm
                  , blockapps-data
                  , merkle-patricia-db
                  , blockapps-util
+                 , ethereum-rlp
                  , ethereum-vm
                  , filepath
                  , haskoin
                  , hflags
+                 , lens
                  , leveldb-haskell
+                 , milena
                  , mtl
                  , persistent-postgresql
                  , postgresql-simple
