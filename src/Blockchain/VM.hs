@@ -7,6 +7,7 @@ module Blockchain.VM (
   ) where
 
 import Prelude hiding (LT, GT, EQ)
+import qualified Prelude as Ordering (Ordering(..))
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -24,7 +25,9 @@ import Data.Time.Clock.POSIX
 import Numeric
 import Text.Printf
 
+import Blockchain.BlockSummaryCacheDB
 import qualified Blockchain.Colors as CL
+import Blockchain.Format
 import Blockchain.VMContext
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
@@ -157,14 +160,23 @@ accountCreationHack address' = do
 
 
 
-getBlockWithNumber::Integer->Block->VMM (Maybe Block)
-getBlockWithNumber num b | num == blockDataNumber (blockBlockData b) = return $ Just b
-getBlockWithNumber num b | num > blockDataNumber (blockBlockData b) = return Nothing
-getBlockWithNumber num b = do
-  parentBlock <- getBlock $ blockDataParentHash $ blockBlockData b
+getBlockHashWithNumber::Integer->SHA->VMM (Maybe SHA)
+getBlockHashWithNumber num h = do
+  liftIO $ putStrLn $ "getBlockHashWithNumber, calling getBSum with " ++ format h
+  bSum <- lift $ getBSum h
+  case num `compare` bSumNumber bSum of
+   Ordering.LT -> getBlockHashWithNumber num $ bSumParentHash bSum
+   Ordering.EQ -> return $ Just h
+   Ordering.GT -> return Nothing
+
+{-
+  | num == bSumNumber b = return $ Just b
+getBlockHashWithNumber num b | num > bSumNumber b = return Nothing
+getBlockHashWithNumber num b = do
+  parentBlock <- getBSum $ bSumParentHash b
   getBlockWithNumber num $
     fromMaybe (error "missing parent block in call to getBlockWithNumber") parentBlock
-
+-}
 
 
 
@@ -299,7 +311,6 @@ runOperation EXTCODECOPY = do
 runOperation BLOCKHASH = do
   number' <- pop::VMM Word256
 
-
   currentBlock <- getEnvVar envBlock
   let currentBlockNumber = blockDataNumber . blockBlockData $ currentBlock
 
@@ -311,10 +322,10 @@ runOperation BLOCKHASH = do
   case (inRange, isRunningTests vmState) of
    (False, _) -> push (0::Word256)
    (True, False) -> do
-          maybeBlock <- getBlockWithNumber (fromIntegral number') currentBlock
-          case maybeBlock of
+          maybeBlockHash <- getBlockHashWithNumber (fromIntegral number') $ blockHash currentBlock
+          case maybeBlockHash of
            Nothing -> push (0::Word256)
-           Just theBlock -> push $ blockHash theBlock
+           Just theBlockHash -> push theBlockHash
    (True, True) -> do
           let SHA h = hash $ BC.pack $ show $ toInteger number'
           push h

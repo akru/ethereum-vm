@@ -40,17 +40,19 @@ withBlockSummaryCacheDB filename f = do
   runBlockSummaryCacheDBT f db
 
 data BlockSummary = BlockSummary {
-      bSumDifficulty::Integer,
-      bSumTotalDifficulty::Int,
-      bSumStateRoot::MP.SHAPtr,
-      bSumGasLimit::Integer,
-      bSumTimestamp::UTCTime,
-      bSumNumber::Integer
-    }
+  bSumParentHash::SHA,
+  bSumDifficulty::Integer,
+  bSumTotalDifficulty::Int,
+  bSumStateRoot::MP.SHAPtr,
+  bSumGasLimit::Integer,
+  bSumTimestamp::UTCTime,
+  bSumNumber::Integer
+  }
 
 blockToBSum::Block->BlockSummary
 blockToBSum b = 
     BlockSummary {
+      bSumParentHash = blockDataParentHash $ blockBlockData b,
       bSumDifficulty = blockDataDifficulty $ blockBlockData b,
       bSumTotalDifficulty = 0, -- blockDataTotalDifficulty $ blockBlockData b,
       bSumStateRoot = blockDataStateRoot $ blockBlockData b,
@@ -60,24 +62,26 @@ blockToBSum b =
     }
 
 instance RLPSerializable BlockSummary where
-    rlpEncode (BlockSummary d td sr gl ts n) =
-        RLPArray [
-                  rlpEncode d,
-                  rlpEncode $ toInteger td,
-                  rlpEncode sr,
-                  rlpEncode gl,
-                  rlpEncode (round $ utcTimeToPOSIXSeconds ts::Integer),
-                  rlpEncode n
-                 ]
-    rlpDecode (RLPArray [d, td, sr, gl, ts, n]) =
-        BlockSummary {
-          bSumDifficulty = rlpDecode d,
-          bSumTotalDifficulty = fromInteger $ rlpDecode td,
-          bSumStateRoot = rlpDecode sr,
-          bSumGasLimit = rlpDecode gl,
-          bSumTimestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode ts,
-          bSumNumber = rlpDecode n
-        }
+  rlpEncode (BlockSummary p d td sr gl ts n) =
+    RLPArray [
+      rlpEncode p,
+      rlpEncode d,
+      rlpEncode $ toInteger td,
+      rlpEncode sr,
+      rlpEncode gl,
+      rlpEncode (round $ utcTimeToPOSIXSeconds ts::Integer),
+      rlpEncode n
+      ]
+  rlpDecode (RLPArray [p, d, td, sr, gl, ts, n]) =
+    BlockSummary {
+      bSumParentHash = rlpDecode p,
+      bSumDifficulty = rlpDecode d,
+      bSumTotalDifficulty = fromInteger $ rlpDecode td,
+      bSumStateRoot = rlpDecode sr,
+      bSumGasLimit = rlpDecode gl,
+      bSumTimestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode ts,
+      bSumNumber = rlpDecode n
+      }
 
                   
 getBSum::(MonadResource m, HasBlockSummaryCacheDB m)=>SHA->m BlockSummary
