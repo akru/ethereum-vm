@@ -44,6 +44,7 @@ import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.DB.AddressStateDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.ExtWord

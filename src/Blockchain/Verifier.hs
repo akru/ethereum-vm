@@ -20,6 +20,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.Data.StorageDB
 import Blockchain.Data.Transaction
+import Blockchain.DB.AddressStateDB
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Mining.Dummy

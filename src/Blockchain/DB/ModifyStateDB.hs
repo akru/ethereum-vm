@@ -11,6 +11,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
+import Blockchain.DB.AddressStateDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.StateDB
 import Blockchain.VMOptions
