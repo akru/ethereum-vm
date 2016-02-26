@@ -31,6 +31,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
+import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
 import Blockchain.DBM
@@ -114,8 +115,14 @@ main = do
                      liftIO $ putStrLn "Adding Blocks"
 
                      blocks <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
-                            
-                     liftIO $ putStrLn $ "blocks: " ++ unlines (map format blocks)
+
+                     liftIO $ putStrLn "creating transactionMap"
+                     let tm = M.fromList $ concat $ map (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) blocks
+                     putTransactionMap tm
+                     liftIO $ putStrLn "done creating transactionMap"
+
+
+--                     liftIO $ putStrLn $ "blocks: " ++ unlines (map format blocks)
                             
 --                     forM_ blocks' $ \(_, _, _, b, _) -> do
 --                       liftIO $ putStrLn $ "putting " ++ format (blockHash b)
@@ -123,7 +130,7 @@ main = do
                      forM_ blocks $ \b -> do
                        liftIO $ putStrLn $ "putting " ++ format (blockHash b)
                        putBSum (blockHash b) (blockToBSum b)
-                     addBlocks $ map (\(_, _, _, v4, _) -> (Nothing, Nothing, blockHash v4, v4, Nothing)) blocks'
+                     addBlocks $ map (\b -> (Nothing, Nothing, blockHash b, b, Nothing)) blocks
                      --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
 
                      when (length blocks < 100) $ liftIO $ waitForNewBlock conn
