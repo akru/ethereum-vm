@@ -55,13 +55,6 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-verifyStateRootExists::Block->ContextM Bool
-verifyStateRootExists b = do
-  val' <- stateDBGet (BL.toStrict $ encode $ blockDataStateRoot $ blockBlockData b)
-  case val' of
-    Nothing -> return False
-    Just _ -> return True
-
 checkParentChildValidity::(Monad m)=>Block->BlockSummary->m ()
 checkParentChildValidity Block{blockBlockData=c} parentBSum = do
     unless (blockDataDifficulty c == nextDifficulty flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
@@ -89,8 +82,6 @@ checkValidity partialBlock parentBSum b = do
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
-  stateRootExists <- verifyStateRootExists b
-  unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (blockDataStateRoot $ blockBlockData b))
   return $ return ()
 
 
