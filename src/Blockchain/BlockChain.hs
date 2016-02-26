@@ -64,6 +64,9 @@ import qualified Data.Aeson as Aeson (encode)
 third4::(a,b,c,d)->c
 third4 (_, _, x, _) = x
 
+fourth5::(a, b, c, d, e)->d
+fourth5 (_, _, _, x, _) = x
+                      
 first5::(a, b, c, d, e)->a
 first5 (x, _, _, _, _) = x
                       
@@ -71,7 +74,7 @@ addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block, Maybe 
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM blocks $ \(bId, bdId, hash', block, maybeParent) -> do
+    forM (filter ((/= 0) . blockDataNumber . blockBlockData . fourth5) blocks) $ \(bId, bdId, hash', block, maybeParent) -> do
       before <- liftIO $ getPOSIXTime 
       (bId', bdId', hash'', block') <- addBlock bId bdId hash' maybeParent block
       after <- liftIO $ getPOSIXTime 
@@ -102,8 +105,10 @@ setTitle value = do
 
 addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
 addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+--  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
   bSum <- case maybeParent of
                Nothing -> do
+                 --liftIO $ putStrLn $ "addBlock, calling putStrLn with " ++ format (blockDataParentHash bd)
                  getBSum $ blockDataParentHash bd
                Just parent -> return $ blockToBSum parent
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
