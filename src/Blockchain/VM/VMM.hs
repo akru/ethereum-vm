@@ -14,6 +14,7 @@ import qualified Data.Set as S
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
+import Blockchain.Data.StorageDB
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
@@ -21,12 +22,11 @@ import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.DB.StorageDB
 import Blockchain.DB.SQLDB
-import Blockchain.ExtDBs
 import Blockchain.ExtWord
+import Blockchain.SHA
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
 import Blockchain.VMContext
-import Blockchain.SHA
 
 type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO)))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))

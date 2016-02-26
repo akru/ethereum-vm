@@ -14,18 +14,18 @@ import Data.Time
 import Data.Time.Clock.POSIX
 
 import Blockchain.BlockSummaryCacheDB
-import Blockchain.VMContext
+import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
+import Blockchain.Data.StorageDB
 import Blockchain.Data.Transaction
-import Blockchain.Constants
-import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
-import Blockchain.VMOptions
 import Blockchain.SHA
+import Blockchain.VMContext
+import Blockchain.VMOptions
 
 --import Debug.Trace
 
