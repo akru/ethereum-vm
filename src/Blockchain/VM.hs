@@ -35,8 +35,8 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
-import Blockchain.DB.AddressStateDB
 import Blockchain.DB.CodeDB
+import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.ExtWord

@@ -14,13 +14,12 @@ import qualified Data.Set as S
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
-import Blockchain.DB.StorageDB
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
+import Blockchain.DB.MemStorageDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
-import Blockchain.DB.StorageDB
 import Blockchain.DB.SQLDB
 import Blockchain.ExtWord
 import Blockchain.SHA

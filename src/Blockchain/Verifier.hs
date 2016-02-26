@@ -18,9 +18,9 @@ import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
-import Blockchain.DB.StorageDB
 import Blockchain.Data.Transaction
-import Blockchain.DB.AddressStateDB
+import Blockchain.DB.MemAddressStateDB
+import Blockchain.DB.MemStorageDB
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
