@@ -18,7 +18,7 @@ import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
-import Blockchain.Data.StorageDB
+import Blockchain.DB.StorageDB
 import Blockchain.Data.Transaction
 import Blockchain.DB.AddressStateDB
 import Blockchain.Format

@@ -14,7 +14,7 @@ import qualified Data.Set as S
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
-import Blockchain.Data.StorageDB
+import Blockchain.DB.StorageDB
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
