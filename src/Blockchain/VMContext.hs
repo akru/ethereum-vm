@@ -46,7 +46,7 @@ data Context =
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
     transactionMap::M.Map SHA Address,
-    contextAddressStateDBMap::M.Map Address AddressState
+    contextAddressStateDBMap::M.Map Address AddressStateModification
     }
 
 type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))

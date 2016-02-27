@@ -22,6 +22,7 @@ import Blockchain.VMContext
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.Log
+import Blockchain.DB.MemAddressStateDB
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -82,7 +83,7 @@ data VMState =
     
     vmException::Maybe VMException,
 
-    vmAddressStateDBMap::M.Map Address AddressState,
+    vmAddressStateDBMap::M.Map Address AddressStateModification,
 
     --These last two variable are only used for the Ethereum tests.
     isRunningTests::Bool,

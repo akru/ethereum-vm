@@ -163,6 +163,8 @@ addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBl
     Right () -> return ()
     Left err -> error err
 
+  flushMemAddressStateDB
+                
   liftIO $ putStrLn $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
 
   return (bId', bdID', hash', b')
