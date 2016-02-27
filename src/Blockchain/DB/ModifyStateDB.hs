@@ -18,7 +18,7 @@ import Blockchain.VMOptions
 
 --import Debug.Trace
 
-addToBalance::(HasHashDB m, HasStateDB m)=>
+addToBalance::(HasMemAddressStateDB m, HasHashDB m, HasStateDB m)=>
               Address->Integer->m Bool
 addToBalance address val = do
   addressState <- getAddressState address
@@ -29,7 +29,7 @@ addToBalance address val = do
     putAddressState address addressState{addressStateBalance = newVal}
     return True
 
-pay::(HasHashDB m, HasStateDB m)=>
+pay::(HasMemAddressStateDB m, HasHashDB m, HasStateDB m)=>
      String->Address->Address->Integer->m Bool
 pay description fromAddr toAddr val = do
   when flags_debug $ do

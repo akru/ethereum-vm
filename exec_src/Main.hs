@@ -103,6 +103,7 @@ main = do
                            cdb
                            (sqlDB' dbs)
                            Nothing
+                           M.empty
                            M.empty) $ 
            forever $ do
                      --blockcachedb <- getBlockSummaryCacheDB

@@ -45,7 +45,8 @@ data Context =
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
-    transactionMap::M.Map SHA Address
+    transactionMap::M.Map SHA Address,
+    contextAddressStateDBMap::M.Map Address AddressState
     }
 
 type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))
@@ -58,6 +59,15 @@ instance HasStateDB ContextM where
     cxt <- get
     put cxt{contextStateDB=(contextStateDB cxt){MPDB.stateRoot=sr}}
 
+instance HasMemAddressStateDB ContextM where
+  getAddressStateDBMap = do
+    cxt <- get
+    return $ contextAddressStateDBMap cxt
+  putAddressStateDBMap theMap = do
+    cxt <- get
+    put $ cxt{contextAddressStateDBMap=theMap}
+
+           
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
@@ -104,13 +114,13 @@ putTransactionMap tm = do
   cxt <- get
   put cxt{transactionMap=tm}
 
-incrementNonce::(HasStateDB m, HasHashDB m)=>
+incrementNonce::(HasMemAddressStateDB m, HasStateDB m, HasHashDB m)=>
                 Address->m ()
 incrementNonce address = do
   addressState <- getAddressState address
   putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
-getNewAddress::(HasStateDB m, HasHashDB m)=>
+getNewAddress::(HasMemAddressStateDB m, HasStateDB m, HasHashDB m)=>
                Address->m Address
 getNewAddress address = do
   addressState <- getAddressState address

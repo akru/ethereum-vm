@@ -17,6 +17,7 @@ import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
+import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.MemStorageDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
@@ -33,7 +34,15 @@ type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO
 --TODO- Do I really need this?  Is it bad that it is undefined?
 instance MonadResource VMM where
   liftResourceT = error "liftResourceT undefined for VMM"
-  
+
+instance HasMemAddressStateDB VMM where
+  getAddressStateDBMap = do
+      cxt <- lift get
+      return $ vmAddressStateDBMap cxt
+  putAddressStateDBMap theMap = do
+      cxt <- lift get
+      lift $ put cxt{vmAddressStateDBMap=theMap}
+
 instance HasHashDB VMM where
     getHashDB = lift $ fmap (contextHashDB . dbs) get
 

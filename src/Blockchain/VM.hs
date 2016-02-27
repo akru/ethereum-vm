@@ -834,6 +834,8 @@ runVMM isRunningTests' preExistingSuicideList callDepth' env availableGas f = do
           return (Left e, vmState{logs=[]})
       (_, stateAfter) -> do
           setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ dbs $ stateAfter
+          putAddressStateDBMap $ contextAddressStateDBMap $ dbs stateAfter
+          
           when flags_debug $ liftIO $ putStrLn "VM has finished running"
           return result
 
@@ -1017,7 +1019,8 @@ create_debugWrapper block owner value initCodeBytes = do
       ((result, finalVMState), finalDBs) <- runEm callEm
 
       setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ finalDBs
-  
+      putAddressStateDBMap $ contextAddressStateDBMap finalDBs
+
       setGasRemaining $ vmGasRemaining finalVMState
 
       case result of
@@ -1059,6 +1062,7 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
       runEm callEm
       
   setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ finalDBs
+  putAddressStateDBMap $ contextAddressStateDBMap finalDBs
   
 
   case result of
