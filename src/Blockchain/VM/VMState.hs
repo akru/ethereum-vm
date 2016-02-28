@@ -118,6 +118,8 @@ startingState isRunningTests' env dbs' = do
                logs=[],
                environment=env,
                suicideList=S.empty,
+
+               vmAddressStateDBMap = contextAddressStateDBMap dbs',
                
                --only used for running ethereum tests
                isRunningTests=isRunningTests',
