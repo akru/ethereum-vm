@@ -135,6 +135,8 @@ addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBl
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
 
+  flushMemAddressStateDB
+
   db <- getStateDB
 
   (b', bId', bdID') <-
@@ -163,8 +165,6 @@ addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBl
     Right () -> return ()
     Left err -> error err
 
-  flushMemAddressStateDB
-                
   liftIO $ putStrLn $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
 
   return (bId', bdID', hash', b')
