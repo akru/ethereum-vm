@@ -83,8 +83,6 @@ data VMState =
     
     vmException::Maybe VMException,
 
-    vmAddressStateDBMap::M.Map Address AddressStateModification,
-
     --These last two variable are only used for the Ethereum tests.
     isRunningTests::Bool,
     debugCallCreates::Maybe [DebugCallCreate]
@@ -119,8 +117,6 @@ startingState isRunningTests' env dbs' = do
                environment=env,
                suicideList=S.empty,
 
-               vmAddressStateDBMap = contextAddressStateDBMap dbs',
-               
                --only used for running ethereum tests
                isRunningTests=isRunningTests',
                debugCallCreates=Nothing

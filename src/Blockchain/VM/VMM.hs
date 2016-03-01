@@ -38,10 +38,10 @@ instance MonadResource VMM where
 instance HasMemAddressStateDB VMM where
   getAddressStateDBMap = do
       cxt <- lift get
-      return $ vmAddressStateDBMap cxt
+      return $ contextAddressStateDBMap $ dbs cxt
   putAddressStateDBMap theMap = do
       cxt <- lift get
-      lift $ put cxt{vmAddressStateDBMap=theMap}
+      lift $ put cxt{dbs=(dbs cxt){contextAddressStateDBMap=theMap}}
 
 instance HasHashDB VMM where
     getHashDB = lift $ fmap (contextHashDB . dbs) get
