@@ -129,7 +129,7 @@ main = do
 --                       liftIO $ putStrLn $ "putting " ++ format (blockHash b)
 --                       putBSum (blockHash b) (blockToBSum b)
                      forM_ blocks $ \b -> do
-                       liftIO $ putStrLn $ "putting " ++ format (blockHash b)
+                       --liftIO $ putStrLn $ "putting " ++ format (blockHash b)
                        putBSum (blockHash b) (blockToBSum b)
                      addBlocks $ map (\b -> (Nothing, Nothing, blockHash b, b, Nothing)) blocks
                      --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
@@ -150,8 +150,8 @@ getUnprocessedKafkaBlocks offsetIORef = do
                               stateWaitTime .= 100000
                               liftIO $ putStrLn $ "about to get offset"
                               --offset <- getLastOffset LatestTime 0 "thetopic"
-                              --let offset = 0
                               offset <- liftIO $ readIORef offsetIORef
+                              --let offset = 17412
                               liftIO $ putStrLn $ "offset: " ++ show offset
                               result <- fetch (Offset $ fromIntegral offset) 0 "thetopic"
 
