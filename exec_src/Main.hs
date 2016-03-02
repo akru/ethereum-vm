@@ -104,6 +104,7 @@ main = do
                            (sqlDB' dbs)
                            Nothing
                            M.empty
+                           M.empty
                            M.empty) $ 
            forever $ do
                      --blockcachedb <- getBlockSummaryCacheDB
@@ -151,7 +152,7 @@ getUnprocessedKafkaBlocks offsetIORef = do
                               liftIO $ putStrLn $ "about to get offset"
                               --offset <- getLastOffset LatestTime 0 "thetopic"
                               offset <- liftIO $ readIORef offsetIORef
-                              --let offset = 17412
+                              --let offset = 0
                               liftIO $ putStrLn $ "offset: " ++ show offset
                               result <- fetch (Offset $ fromIntegral offset) 0 "thetopic"
 

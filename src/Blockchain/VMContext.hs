@@ -33,6 +33,7 @@ import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.MemStorageDB
 import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
+import Blockchain.ExtWord
 import Blockchain.VMOptions
 import Blockchain.SHA
 
@@ -46,7 +47,8 @@ data Context =
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
     transactionMap::M.Map SHA Address,
-    contextAddressStateDBMap::M.Map Address AddressStateModification
+    contextAddressStateDBMap::M.Map Address AddressStateModification,
+    contextStorageMap::M.Map (Address, Word512) Word512
     }
 
 type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))
@@ -71,8 +73,8 @@ instance HasMemAddressStateDB ContextM where
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
-    return $ MPDB.ldb $ contextStateDB cxt --storage and states use the same database!
-
+    return $ (MPDB.ldb $ contextStateDB cxt, --storage and states use the same database!
+              contextStorageMap cxt)
 instance HasHashDB ContextM where
   getHashDB = fmap contextHashDB get
 
