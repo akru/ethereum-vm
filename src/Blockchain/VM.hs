@@ -376,9 +376,7 @@ runOperation SSTORE = do
   p <- pop
   val <- pop::VMM Word256
 
-  if val == 0
-    then deleteStorageKey p
-    else putStorageKeyVal p val
+  putStorageKeyVal p val --putStorageKeyVal will delete value if val=0
 
 --TODO- refactor so that I don't have to use this -1 hack
 runOperation JUMP = do

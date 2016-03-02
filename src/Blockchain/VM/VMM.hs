@@ -214,16 +214,10 @@ getAllStorageKeyVals = do
   owner <- getEnvVar envOwner
   getAllStorageKeyVals' owner
 
-
 putStorageKeyVal::Word256->Word256->VMM ()
 putStorageKeyVal key val = do
   owner <- getEnvVar envOwner
   putStorageKeyVal' owner key val
-
-deleteStorageKey::Word256->VMM ()
-deleteStorageKey key = do
-  owner <- getEnvVar envOwner
-  deleteStorageKey' owner key
 
 vmTrace::String->VMM ()
 vmTrace msg = do
