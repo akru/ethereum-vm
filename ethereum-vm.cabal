@@ -29,6 +29,7 @@ library
                  , either
                  , esqueleto
                  , blockapps-data
+                 , blockapps-data-db
                  , ethereum-encryption
                  , merkle-patricia-db
                  , ethereum-rlp
@@ -77,6 +78,7 @@ executable ethereum-vm
                  , directory
                  , esqueleto
                  , blockapps-data
+                 , blockapps-data-db
                  , merkle-patricia-db
                  , blockapps-util
                  , ethereum-vm
