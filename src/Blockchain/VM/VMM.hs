@@ -18,7 +18,7 @@ import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.MemAddressStateDB
-import Blockchain.DB.MemStorageDB
+import Blockchain.DB.StorageDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
 import Blockchain.DB.SQLDB
