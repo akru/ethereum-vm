@@ -94,7 +94,7 @@ main = do
       conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
       _ <- liftIO $ setupTrigger conn
 
-      offsetIORef <- liftIO $ newIORef 0
+      offsetIORef <- liftIO $ newIORef flags_startingBlock
            
       withBlockSummaryCacheDB "blocksummarycachedb" $ 
            flip runStateT (Context
@@ -135,7 +135,7 @@ main = do
                      addBlocks $ map (\b -> (Nothing, Nothing, blockHash b, b, Nothing)) blocks
                      --addBlocks $ map (\(v1, v2, v3, v4, v5) -> (Just v1, Just v2, v3, v4, Just v5)) blocks'
 
-                     when (length blocks < 100) $ liftIO $ waitForNewBlock conn
+                     --when (length blocks < 100) $ liftIO $ waitForNewBlock conn
 
   return ()
 
