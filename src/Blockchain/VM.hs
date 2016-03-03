@@ -39,6 +39,7 @@ import Blockchain.DB.CodeDB
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
+import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.VMOptions
 import Blockchain.SHA
@@ -832,6 +833,7 @@ runVMM isRunningTests' preExistingSuicideList callDepth' env availableGas f = do
           return (Left e, vmState{logs=[]})
       (_, stateAfter) -> do
           setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ dbs $ stateAfter
+          putStorageMap $ contextStorageMap $ dbs stateAfter
           putAddressStateDBMap $ contextAddressStateDBMap $ dbs stateAfter
           
           when flags_debug $ liftIO $ putStrLn "VM has finished running"
@@ -1017,6 +1019,7 @@ create_debugWrapper block owner value initCodeBytes = do
       ((result, finalVMState), finalDBs) <- runEm callEm
 
       setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ finalDBs
+      putStorageMap $ contextStorageMap finalDBs
       putAddressStateDBMap $ contextAddressStateDBMap finalDBs
 
       setGasRemaining $ vmGasRemaining finalVMState
@@ -1060,6 +1063,7 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
       runEm callEm
       
   setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ finalDBs
+  putStorageMap $ contextStorageMap finalDBs
   putAddressStateDBMap $ contextAddressStateDBMap finalDBs
   
 

@@ -57,6 +57,10 @@ instance HasStorageDB VMM where
       cxt <- lift get
       return (MP.ldb $ contextStateDB $ dbs cxt, --storage uses the state db also
               contextStorageMap $ dbs cxt)
+    putStorageMap theMap = do
+      cxt <- lift get
+      lift $ put cxt{dbs=(dbs cxt){contextStorageMap=theMap}}
+
         
 instance HasCodeDB VMM where
     getCodeDB = lift $ fmap (contextCodeDB . dbs) get

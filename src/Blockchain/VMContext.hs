@@ -48,7 +48,7 @@ data Context =
     cachedBestProcessedBlock::Maybe Block,
     transactionMap::M.Map SHA Address,
     contextAddressStateDBMap::M.Map Address AddressStateModification,
-    contextStorageMap::M.Map (Address, Word512) Word512
+    contextStorageMap::M.Map (Address, Word256) Word256
     }
 
 type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))
@@ -75,6 +75,10 @@ instance HasStorageDB ContextM where
     cxt <- get
     return $ (MPDB.ldb $ contextStateDB cxt, --storage and states use the same database!
               contextStorageMap cxt)
+  putStorageMap theMap = do
+    cxt <- get
+    put cxt{contextStorageMap=theMap}
+
 instance HasHashDB ContextM where
   getHashDB = fmap contextHashDB get
 

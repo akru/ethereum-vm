@@ -47,6 +47,7 @@ import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
+import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -135,6 +136,7 @@ addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBl
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
 
+  flushMemStorageDB
   flushMemAddressStateDB
 
   db <- getStateDB
