@@ -96,7 +96,7 @@ main = do
 
       offsetIORef <- liftIO $ newIORef flags_startingBlock
            
-      withBlockSummaryCacheDB "blocksummarycachedb" $ 
+      withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
            flip runStateT (Context
                            MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
                            hdb
