@@ -10,7 +10,8 @@ module Blockchain.VMContext (
   getTransactionAddress,
   putTransactionMap,
   incrementNonce,
-  getNewAddress
+  getNewAddress,
+  purgeStorageMap
   ) where
 
 
@@ -135,6 +136,10 @@ getNewAddress address = do
   incrementNonce address
   return newAddress
 
+purgeStorageMap::HasStorageDB m=>Address->m ()
+purgeStorageMap address = do
+  (_, storageMap) <- getStorageDB
+  putStorageMap $ M.filterWithKey (\key _ -> fst key /= address) storageMap
 
 
 

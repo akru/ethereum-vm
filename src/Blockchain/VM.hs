@@ -827,10 +827,10 @@ runVMM isRunningTests' preExistingSuicideList callDepth' env availableGas f = do
       runEitherT f
 
   case result of
-      (Left e, vmState) -> do
+      (Left e, vmState') -> do
           liftIO $ putStrLn $ CL.red $ "Exception caught (" ++ show e ++ "), reverting state"
           when flags_debug $ liftIO $ putStrLn "VM has finished running"
-          return (Left e, vmState{logs=[]})
+          return (Left e, vmState'{logs=[]})
       (_, stateAfter) -> do
           setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ dbs $ stateAfter
           putStorageMap $ contextStorageMap $ dbs stateAfter
@@ -887,6 +887,7 @@ create isRunningTests' preExistingSuicideList b callDepth' sender origin value' 
       --have the value, and I can revert without checking for success.
       _ <- pay "revert value transfer" newAddress sender (fromIntegral value')
 
+      purgeStorageMap newAddress
       deleteAddressState newAddress
       return (Left e, vmState'{vmGasRemaining=0}) --need to zero gas in the case of an exception
     _ -> return ret
@@ -964,8 +965,6 @@ call' = do
   value' <- getEnvVar envValue
   receiveAddress <- getEnvVar envOwner
   sender <- getEnvVar envSender
-  theData <- getEnvVar envInputData
-  let Address receiveAddressNumber = receiveAddress
 
   --TODO- Deal with this return value
   _ <- pay "call value transfer" sender receiveAddress (fromIntegral value')

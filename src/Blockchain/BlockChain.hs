@@ -255,7 +255,9 @@ addTransaction isRunningTests' b remainingBlockGas t = do
             when (not success') $ error "oops, refund was too much"
 
             when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList (suicideList newVMState'))
-            forM_ (S.toList $ suicideList newVMState') (lift . deleteAddressState)
+            forM_ (S.toList $ suicideList newVMState') $ \address -> do
+              lift $ purgeStorageMap address
+              lift $ deleteAddressState address
                          
         
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
