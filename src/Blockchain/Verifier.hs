@@ -6,12 +6,6 @@ module Blockchain.Verifier (
   ) where
 
 import Control.Monad
-import Data.Binary hiding (get)
-import Data.Bits
-import qualified Data.ByteString.Lazy as BL
---import Data.Maybe
-import Data.Time
-import Data.Time.Clock.POSIX
 
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.Constants
@@ -20,8 +14,6 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
 import Blockchain.DB.MemAddressStateDB
-import Blockchain.DB.StorageDB
-import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
 import Blockchain.SHA
@@ -29,14 +21,6 @@ import Blockchain.VMContext
 import Blockchain.VMOptions
 
 --import Debug.Trace
-
-{-
-initializeBlockChain::ContextM ()
-initializeBlockChain = do
-  let bytes = rlpSerialize $ rlpEncode genesisBlock
-  blockDBPut (BL.toStrict $ encode $ blockHash $ genesisBlock) bytes
-  detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
--}
 
 {-
 nextGasLimit::Integer->Integer->Integer
