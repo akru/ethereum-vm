@@ -87,28 +87,15 @@ getUnprocessedKafkaBlocks::IORef Integer->IO [Block]
 getUnprocessedKafkaBlocks offsetIORef = do
   ret <-
       runKafka (mkKafkaState "qqqqkafkaclientidqqqq" ("127.0.0.1", 9092)) $ do
-                              stateRequiredAcks .= -1
-                              stateWaitSize .= 1
-                              stateWaitTime .= 100000
-                              --offset <- getLastOffset LatestTime 0 "thetopic"
-                              offset <- liftIO $ readIORef offsetIORef
-                              result <- fetch (Offset $ fromIntegral offset) 0 "thetopic"
-
-                                        
-                              let qq = concat $ map (map (_kafkaByteString . fromJust . _valueBytes . fifth5 . _messageFields .  _setMessage)) $ map _messageSetMembers $ map fourth4 $ head $ map snd $ _fetchResponseFields result
-
-                              liftIO $ writeIORef offsetIORef (offset + fromIntegral (length qq))
-                                       
-                              return $ fmap (rlpDecode . rlpDeserialize) qq
+        stateRequiredAcks .= -1
+        stateWaitSize .= 1
+        stateWaitTime .= 100000
+        --offset <- getLastOffset LatestTime 0 "thetopic"
+        offset <- liftIO $ readIORef offsetIORef
+        result <- fetchBlocks $ Offset $ fromIntegral offset
+        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length result)
+        return result
 
   case ret of
     Left e -> error $ show e
     Right v -> return v
-
-fourth4::(a, b, c, d)->d
-fourth4 (_, _, _, x) = x
-
-fifth5::(a, b, c, d, e)->e
-fifth5 (_, _, _, _, x) = x
-                                                             
-                                
