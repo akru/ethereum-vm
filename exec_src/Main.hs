@@ -86,7 +86,7 @@ main = do
 getUnprocessedKafkaBlocks::IORef Integer->IO [Block]
 getUnprocessedKafkaBlocks offsetIORef = do
   ret <-
-      runKafka (mkKafkaState "qqqqkafkaclientidqqqq" ("127.0.0.1", 9092)) $ do
+      runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
         stateRequiredAcks .= -1
         stateWaitSize .= 1
         stateWaitTime .= 100000
