@@ -66,19 +66,19 @@ import qualified Data.Aeson as Aeson (encode)
 third4::(a,b,c,d)->c
 third4 (_, _, x, _) = x
 
-fourth5::(a, b, c, d, e)->d
-fourth5 (_, _, _, x, _) = x
+fourth4::(a, b, c, d)->d
+fourth4 (_, _, _, x) = x
                       
-first5::(a, b, c, d, e)->a
-first5 (x, _, _, _, _) = x
+first4::(a, b, c, d)->a
+first4 (x, _, _, _) = x
                       
-addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block, Maybe Block)]->ContextM ()
+addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM (filter ((/= 0) . blockDataNumber . blockBlockData . fourth5) blocks) $ \(bId, bdId, hash', block, maybeParent) -> do
+    forM (filter ((/= 0) . blockDataNumber . blockBlockData . fourth4) blocks) $ \(bId, bdId, hash', block) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', hash'', block') <- addBlock bId bdId hash' maybeParent block
+      (bId', bdId', hash'', block') <- addBlock bId bdId hash' block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
@@ -86,7 +86,7 @@ addBlocks blocks = do
 
   let fullBlocks = filter ((/= SHA 1) . third4) ret
 
-  when (isJust $ first5 $ head blocks) $ do
+  when (isJust $ first4 $ head blocks) $ do
                      case fullBlocks of
                        [] -> return ()
                        _ -> do
@@ -105,17 +105,12 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Maybe Block->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
-addBlock maybeBId maybeBdId hash' maybeParent b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
+addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
-  bSum <- case maybeParent of
-               Nothing -> do
-                 --liftIO $ putStrLn $ "addBlock, calling putStrLn with " ++ format (blockDataParentHash bd)
-                 getBSum $ blockDataParentHash bd
-               Just parent -> return $ blockToBSum parent
+  bSum <- getBSum $ blockDataParentHash bd
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
-
   setStateDBStateRoot $ bSumStateRoot bSum
   s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
