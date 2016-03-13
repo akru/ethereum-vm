@@ -409,6 +409,6 @@ replaceBestIfBetter (bId, blkDataId) b = do
 
     when flags_sqlDiff $ do
       let newStateRoot = blockDataStateRoot (blockBlockData b)
-      sqlDiff blkDataId newNumber oldStateRoot newStateRoot
+      sqlDiff newNumber oldStateRoot newStateRoot
       
       putBestBlockId bId newNumber
