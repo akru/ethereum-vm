@@ -85,15 +85,11 @@ addBlocks blocks = do
 
   let fullBlocks = filter ((/= SHA 1) . fst) ret
 
-  when (isJust $ first4 $ head blocks) $ do
-                     case fullBlocks of
-                       [] -> return ()
-                       _ -> do
-                         let (_, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
-                         replaceBestIfBetter lastBlock
-
-                     return ()
-
+  case fullBlocks of
+   [] -> return ()
+   _ -> do
+     let (_, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
+     replaceBestIfBetter lastBlock
 
 setTitle::String->IO()
 setTitle value = do
@@ -407,5 +403,4 @@ replaceBestIfBetter b = do
     when flags_sqlDiff $ do
       let newStateRoot = blockDataStateRoot (blockBlockData b)
       sqlDiff newNumber oldStateRoot newStateRoot
-      
       putBestBlockInfo newStateRoot newNumber
