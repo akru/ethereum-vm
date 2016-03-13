@@ -138,7 +138,9 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
       --[(newBId, newBDId)] <- putBlocks [newBlock] True
       --deleteBlock bId bdId
 
-      updateBlockDataStateRoot bId bdId newBlockData
+      produceUnminedBlocks [newBlock]
+      
+      --updateBlockDataStateRoot bId bdId newBlockData
       liftIO $ putStrLn "stateRoot has been filled in"
       
       --return (newBlock, newBId, newBDId)
