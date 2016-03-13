@@ -29,7 +29,6 @@ import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DBM
 import Blockchain.VMOptions
-import Blockchain.Trigger
 import Blockchain.VMContext
 
 main::IO ()
@@ -53,7 +52,6 @@ main = do
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
 
       conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
-      _ <- liftIO $ setupTrigger conn
 
       offsetIORef <- liftIO $ newIORef flags_startingBlock
            
