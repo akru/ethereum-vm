@@ -91,7 +91,7 @@ addBlocks blocks = do
                        [] -> return ()
                        _ -> do
                          let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
-                         replaceBestIfBetter lastBId lastBlock
+                         replaceBestIfBetter lastBlock
 
                      let fst4 (x, _, _, _) = x
 
@@ -397,18 +397,19 @@ formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 
 ----------------
 
-replaceBestIfBetter::BlockId->Block->ContextM ()
-replaceBestIfBetter bId b = do
-  (oldStateRoot, bestNumber) <- getBestProcessedStateRoot
+replaceBestIfBetter::Block->ContextM ()
+replaceBestIfBetter b = do
+  (oldStateRoot, oldBestNumber) <- getBestBlockInfo
 
   let newNumber = blockDataNumber $ blockBlockData b
+      newStateRoot = blockDataStateRoot $ blockBlockData b
 
-  liftIO $ putStrLn $ "newNumber = " ++ show newNumber ++ ", bestNumber = " ++ show bestNumber
+  liftIO $ putStrLn $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show oldBestNumber
 
-  when (newNumber > bestNumber) $ do
+  when (newNumber > oldBestNumber) $ do
 
     when flags_sqlDiff $ do
       let newStateRoot = blockDataStateRoot (blockBlockData b)
       sqlDiff newNumber oldStateRoot newStateRoot
       
-      putBestBlockId bId newNumber
+      putBestBlockInfo newStateRoot newNumber
