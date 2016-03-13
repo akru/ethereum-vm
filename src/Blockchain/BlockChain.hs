@@ -391,16 +391,16 @@ formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 
 replaceBestIfBetter::Block->ContextM ()
 replaceBestIfBetter b = do
-  (oldStateRoot, oldBestNumber) <- getBestBlockInfo
+  (_, oldBestBlock) <- getBestBlockInfo
 
   let newNumber = blockDataNumber $ blockBlockData b
       newStateRoot = blockDataStateRoot $ blockBlockData b
 
-  liftIO $ putStrLn $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show oldBestNumber
+  liftIO $ putStrLn $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show (blockDataNumber oldBestBlock)
 
-  when (newNumber > oldBestNumber) $ do
+  when (newNumber > blockDataNumber oldBestBlock) $ do
 
     when flags_sqlDiff $ do
       let newStateRoot = blockDataStateRoot (blockBlockData b)
-      sqlDiff newNumber oldStateRoot newStateRoot
-      putBestBlockInfo newStateRoot newNumber
+      sqlDiff newNumber (blockDataStateRoot oldBestBlock) newStateRoot
+      putBestBlockInfo (blockHash b) (blockBlockData b)
