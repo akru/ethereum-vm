@@ -40,7 +40,6 @@ import Blockchain.Data.DiffDB
 import Blockchain.Data.Extra
 import Blockchain.Data.Log
 import Blockchain.Data.LogDB
-import Blockchain.Data.UnprocessedDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
@@ -92,10 +91,6 @@ addBlocks blocks = do
                        _ -> do
                          let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
                          replaceBestIfBetter lastBlock
-
-                     let fst4 (x, _, _, _) = x
-
-                     _ <- deleteUnprocessed $ map fst4 ret
 
                      return ()
 
