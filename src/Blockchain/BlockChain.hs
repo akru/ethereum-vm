@@ -62,8 +62,8 @@ import qualified Data.Aeson as Aeson (encode)
 
 --import Debug.Trace
 
-third4::(a,b,c,d)->c
-third4 (_, _, x, _) = x
+--third4::(a,b,c,d)->c
+--third4 (_, _, x, _) = x
 
 fourth4::(a, b, c, d)->d
 fourth4 (_, _, _, x) = x
@@ -77,19 +77,19 @@ addBlocks blocks = do
   ret <-
     forM (filter ((/= 0) . blockDataNumber . blockBlockData . fourth4) blocks) $ \(bId, bdId, hash', block) -> do
       before <- liftIO $ getPOSIXTime 
-      (bId', bdId', hash'', block') <- addBlock bId bdId hash' block
+      (hash'', block') <- addBlock bId bdId hash' block
       after <- liftIO $ getPOSIXTime 
 
       liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
-      return (bId', bdId', hash'', block')
+      return (hash'', block')
 
-  let fullBlocks = filter ((/= SHA 1) . third4) ret
+  let fullBlocks = filter ((/= SHA 1) . fst) ret
 
   when (isJust $ first4 $ head blocks) $ do
                      case fullBlocks of
                        [] -> return ()
                        _ -> do
-                         let (lastBId, lastBDId, _, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
+                         let (_, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
                          replaceBestIfBetter lastBlock
 
                      return ()
@@ -100,7 +100,7 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Block->ContextM (E.Key Block, E.Key BlockDataRef, SHA, Block)
+addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Block->ContextM (SHA, Block)
 addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
   bSum <- getBSum $ blockDataParentHash bd
@@ -131,7 +131,7 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
 
   db <- getStateDB
 
-  (b', bId', bdID') <-
+  b' <-
     if hash' == SHA 1
     then do
       let bId = fromMaybe (error "you can't currently run mining and kafka at the same time") maybeBId
@@ -141,16 +141,17 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
           newBlock = b{blockBlockData = newBlockData}
       --[(newBId, newBDId)] <- putBlocks [newBlock] True
       --deleteBlock bId bdId
+
       updateBlockDataStateRoot bId bdId newBlockData
       liftIO $ putStrLn "stateRoot has been filled in"
       
       --return (newBlock, newBId, newBDId)
-      return (newBlock, bId, bdId)
+      return newBlock
     else do
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
         liftIO $ putStrLn $ "newStateRoot: " ++ format (MP.stateRoot db)
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
-      return (b, fromMaybe (error "you can't use sqlDiff and kafka at the same time") maybeBId, fromMaybe (error "you can't use sqlDiff and kafka at the same time") maybeBdId)
+      return b
 
   valid <- checkValidity (hash' == SHA 1) bSum b'
   case valid of
@@ -159,7 +160,7 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
 
   liftIO $ putStrLn $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
 
-  return (bId', bdID', hash', b')
+  return (hash', b')
 
 updateBlockDataStateRoot::HasSQLDB m=>E.Key Block->E.Key BlockDataRef->BlockData->m ()
 updateBlockDataStateRoot bid bdid newbd = do
