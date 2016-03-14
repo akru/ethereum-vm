@@ -122,7 +122,7 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   db <- getStateDB
 
   b' <-
-    if hash' == SHA 1
+    if blockDataStateRoot (blockBlockData b) == MP.SHAPtr "" --TODO fix this, we are using this to communicate between strato-quarry and ethereum-vm, but anyone could submit a block with stateroot "" and cause trouble.
     then do
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}
