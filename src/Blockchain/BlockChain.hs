@@ -62,26 +62,20 @@ import qualified Data.Aeson as Aeson (encode)
 
 --import Debug.Trace
 
---third4::(a,b,c,d)->c
---third4 (_, _, x, _) = x
+timeit::MonadIO m=>String->m a->m a
+timeit message f = do
+  before <- liftIO $ getPOSIXTime 
+  ret <- f
+  after <- liftIO $ getPOSIXTime 
+  liftIO $ putStrLn $ "#### " ++ message ++ " time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+  return ret
 
-fourth4::(a, b, c, d)->d
-fourth4 (_, _, _, x) = x
-                      
-first4::(a, b, c, d)->a
-first4 (x, _, _, _) = x
-                      
-addBlocks::[(Maybe (E.Key Block), Maybe (E.Key BlockDataRef), SHA, Block)]->ContextM ()
+addBlocks::[(SHA, Block)]->ContextM ()
 addBlocks [] = return ()
 addBlocks blocks = do
   ret <-
-    forM (filter ((/= 0) . blockDataNumber . blockBlockData . fourth4) blocks) $ \(bId, bdId, hash', block) -> do
-      before <- liftIO $ getPOSIXTime 
-      (hash'', block') <- addBlock bId bdId hash' block
-      after <- liftIO $ getPOSIXTime 
-
-      liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
-      return (hash'', block')
+    forM (filter ((/= 0) . blockDataNumber . blockBlockData . snd) blocks) $ \(hash', block) ->
+      timeit "Block insertion" $ addBlock hash' block
 
   let fullBlocks = filter ((/= SHA 1) . fst) ret
 
@@ -96,8 +90,8 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Maybe (E.Key Block)->Maybe (E.Key BlockDataRef)->SHA->Block->ContextM (SHA, Block)
-addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::SHA->Block->ContextM (SHA, Block)
+addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
   bSum <- getBSum $ blockDataParentHash bd
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
@@ -130,20 +124,11 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
   b' <-
     if hash' == SHA 1
     then do
-      let bId = fromMaybe (error "you can't currently run mining and kafka at the same time") maybeBId
-          bdId = fromMaybe (error "you can't currently run mining and kafka at the same time") maybeBdId
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}
           newBlock = b{blockBlockData = newBlockData}
-      --[(newBId, newBDId)] <- putBlocks [newBlock] True
-      --deleteBlock bId bdId
-
       produceUnminedBlocks [newBlock]
-      
-      --updateBlockDataStateRoot bId bdId newBlockData
       liftIO $ putStrLn "stateRoot has been filled in"
-      
-      --return (newBlock, newBId, newBDId)
       return newBlock
     else do
       when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
@@ -160,23 +145,9 @@ addBlock maybeBId maybeBdId hash' b@Block{blockBlockData=bd, blockBlockUncles=un
 
   return (hash', b')
 
-updateBlockDataStateRoot::HasSQLDB m=>E.Key Block->E.Key BlockDataRef->BlockData->m ()
-updateBlockDataStateRoot bid bdid newbd = do
-  pool <- getSQLDB
-  runResourceT $ flip SQL.runSqlPool pool $ do
-    E.update $ \bd -> do
-      E.where_ (bd E.^. BlockDataRefId E.==. E.val bdid)
-      E.set bd [ BlockDataRefStateRoot E.=. E.val (blockDataStateRoot newbd) ]
-      return ()
-    E.update $ \b -> do
-      E.where_ (b E.^. BlockId E.==. E.val bid)
-      E.set b [ BlockBlockData E.=. E.val newbd ]
-      return ()
-
 addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
-
   result <-
     printTransactionMessage t b $
       runEitherT $ addTransaction False b blockGas t

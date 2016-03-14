@@ -77,7 +77,7 @@ main = do
              forM_ blocks $ \b -> do
                putBSum (blockHash b) (blockToBSum b)
                        
-             addBlocks $ map (\b -> (Nothing, Nothing, blockHash b, b)) blocks
+             addBlocks $ map (\b -> (blockHash b, b)) blocks
 
   return ()
 
