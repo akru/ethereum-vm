@@ -136,7 +136,7 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return b
 
-  valid <- checkValidity (hash' == SHA 1) bSum b'
+  valid <- checkValidity (blockDataStateRoot (blockBlockData b) == MP.SHAPtr "") bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err
