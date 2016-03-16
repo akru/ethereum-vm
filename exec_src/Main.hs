@@ -41,43 +41,22 @@ main = do
   homeDir <- getHomeDirectory
   createDirectoryIfMissing False $ homeDir </> dbDir "h"
 
-  _ <-
-    runResourceT $ do
-      dbs <- openDBs
-      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+  offsetIORef <- liftIO $ newIORef flags_startingBlock
 
-      conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
+  runContextM $ forever $ do
+    liftIO $ putStrLn "Getting Blocks"
+    blocks <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
 
-      offsetIORef <- liftIO $ newIORef flags_startingBlock
-           
-      withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
-           flip runStateT (Context
-                           MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
-                           hdb
-                           cdb
-                           (sqlDB' dbs)
-                           Nothing
-                           M.empty
-                           M.empty
-                           M.empty) $ 
-           forever $ do
-             liftIO $ putStrLn "Getting Blocks"
-             blocks <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
+    liftIO $ putStrLn "creating transactionMap"
+    let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
+    putTransactionMap tm
+    liftIO $ putStrLn "done creating transactionMap"
 
-             liftIO $ putStrLn "creating transactionMap"
-             let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
-             putTransactionMap tm
-             liftIO $ putStrLn "done creating transactionMap"
-
-             forM_ blocks $ \b -> do
-               putBSum (blockHash b) (blockToBSum b)
+    forM_ blocks $ \b -> do
+      putBSum (blockHash b) (blockToBSum b)
                        
-             addBlocks $ map (\b -> (blockHash b, b)) blocks
+    addBlocks $ map (\b -> (blockHash b, b)) blocks
+
 
   return ()
 

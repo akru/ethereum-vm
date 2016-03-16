@@ -29,10 +29,12 @@ library
                  , bytestring
                  , containers
                  , cryptohash
+                 , directory
                  , either
                  , esqueleto
                  , ethereum-encryption
                  , ethereum-rlp
+                 , filepath
                  , haskoin
                  , hflags
                  , leveldb-haskell
@@ -45,6 +47,7 @@ library
                  , resourcet
                  , SHA2
                  , strato-adit
+                 , strato-conf
                  , time
                  , transformers
                  , transformers-base

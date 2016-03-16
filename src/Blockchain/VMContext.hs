@@ -3,6 +3,7 @@
 module Blockchain.VMContext (
   Context(..),
   ContextM,
+  runContextM,
 --  getDebugMsg,
 --  clearDebugMsg,
   getCachedBestProcessedBlock,
@@ -16,24 +17,33 @@ module Blockchain.VMContext (
 
 
 import Control.Monad.IO.Class
+import Control.Monad.Logger    (runNoLoggingT)
 import Control.Monad.Trans.Resource
 import Control.Monad.State
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.Map as M
 import Data.Maybe
+import qualified Database.LevelDB as DB
+import qualified Database.Persist.Postgresql as SQL
+import System.Directory
+import System.FilePath
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
+
 
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Transaction
-import qualified Blockchain.Database.MerklePatricia as MPDB
+import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.StorageDB
 import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
+import Blockchain.Constants
+import Blockchain.EthConf
 import Blockchain.ExtWord
 import Blockchain.VMOptions
 import Blockchain.SHA
@@ -42,7 +52,7 @@ import Blockchain.SHA
 
 data Context =
   Context {
-    contextStateDB::MPDB.MPDB,
+    contextStateDB::MP.MPDB,
     contextHashDB::HashDB,
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
@@ -60,7 +70,7 @@ instance HasStateDB ContextM where
     return $ contextStateDB cxt
   setStateDBStateRoot sr = do
     cxt <- get
-    put cxt{contextStateDB=(contextStateDB cxt){MPDB.stateRoot=sr}}
+    put cxt{contextStateDB=(contextStateDB cxt){MP.stateRoot=sr}}
 
 instance HasMemAddressStateDB ContextM where
   getAddressStateDBMap = do
@@ -74,7 +84,7 @@ instance HasMemAddressStateDB ContextM where
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
-    return $ (MPDB.ldb $ contextStateDB cxt, --storage and states use the same database!
+    return $ (MP.ldb $ contextStateDB cxt, --storage and states use the same database!
               contextStorageMap cxt)
   putStorageMap theMap = do
     cxt <- get
@@ -88,6 +98,37 @@ instance HasCodeDB ContextM where
 
 instance HasSQLDB ContextM where
   getSQLDB = fmap contextSQLDB get
+
+connStr'::SQL.ConnectionString
+connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=" ++ show (port $ sqlConfig ethConf)
+
+runContextM f = do
+  homeDir <- getHomeDirectory
+  createDirectoryIfMissing False $ homeDir </> dbDir "h"
+
+  _ <-
+    runResourceT $ do
+      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+
+      conn <- runNoLoggingT  $ SQL.createPostgresqlPool connStr' 20
+
+      withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
+        runStateT f (Context
+                     MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
+                     hdb
+                     cdb
+                     conn
+                     Nothing
+                     M.empty
+                     M.empty
+                     M.empty)
+
+  return ()
 
 {-
 getDebugMsg::ContextM String
