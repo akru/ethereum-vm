@@ -90,6 +90,7 @@ getUnprocessedKafkaBlocks offsetIORef = do
         stateWaitTime .= 100000
         --offset <- getLastOffset LatestTime 0 "thetopic"
         offset <- liftIO $ readIORef offsetIORef
+        liftIO $ putStrLn $ "Fetching unmined blocks with offset " ++ (show offset)
         result <- fetchBlocks $ Offset $ fromIntegral offset
         liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length result)
         return result
