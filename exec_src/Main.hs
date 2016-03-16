@@ -38,9 +38,6 @@ main = do
 
   _ <- $initHFlags "The Ethereum Haskell Peer"
 
-  homeDir <- getHomeDirectory
-  createDirectoryIfMissing False $ homeDir </> dbDir "h"
-
   offsetIORef <- liftIO $ newIORef flags_startingBlock
 
   runContextM $ forever $ do
