@@ -16,6 +16,8 @@ import Blockchain.Data.Transaction
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
+import Blockchain.Mining.Instant
+import Blockchain.Mining.SHA
 import Blockchain.SHA
 import Blockchain.VMContext
 import Blockchain.VMOptions
@@ -58,12 +60,14 @@ checkParentChildValidity Block{blockBlockData=c} parentBSum = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
+verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
+
 checkValidity::Monad m=>Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock parentBSum b = do
   checkParentChildValidity b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
-    let miningVerified = (verify dummyMiner) b
-    unless miningVerified $ fail "block falsEEEly mined, verification failed"
+    let miningVerified = (verify verifier) b
+    unless miningVerified $ fail "block falsely mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
