@@ -16,6 +16,8 @@ import Blockchain.Data.Transaction
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
+import Blockchain.Mining.Instant
+import Blockchain.Mining.SHA
 import Blockchain.SHA
 import Blockchain.VMContext
 import Blockchain.VMOptions
