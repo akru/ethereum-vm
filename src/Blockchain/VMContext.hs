@@ -119,12 +119,12 @@ runContextM f = do
 
       withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
         runStateT f (Context
-                     MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
+                     MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "stateroot not set"}
                      hdb
                      cdb
                      conn
+                     Nothing
                      (error "contextWhoSignedThisTransaction not set")
-                     undefined
                      M.empty
                      M.empty)
 
