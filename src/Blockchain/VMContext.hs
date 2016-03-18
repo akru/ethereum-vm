@@ -9,7 +9,7 @@ module Blockchain.VMContext (
   getCachedBestProcessedBlock,
   putCachedBestProcessedBlock,      
   getTransactionAddress,
-  putTransactionMap,
+  putWSTT,
   incrementNonce,
   getNewAddress,
   purgeStorageMap
@@ -57,7 +57,7 @@ data Context =
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
-    transactionMap::M.Map SHA Address,
+    contextWhoSignedThisTransaction::Transaction->Address,
     contextAddressStateDBMap::M.Map Address AddressStateModification,
     contextStorageMap::M.Map (Address, Word256) Word256
     }
@@ -123,8 +123,8 @@ runContextM f = do
                      hdb
                      cdb
                      conn
-                     Nothing
-                     M.empty
+                     (error "contextWhoSignedThisTransaction not set")
+                     undefined
                      M.empty
                      M.empty)
 
@@ -155,12 +155,12 @@ putCachedBestProcessedBlock b = do
 getTransactionAddress::Transaction->ContextM Address
 getTransactionAddress t = do
   cxt <- get
-  return $ fromMaybe (error "missing value in transaction map") $ M.lookup (transactionHash t) (transactionMap cxt)
+  return $ contextWhoSignedThisTransaction cxt t
 
-putTransactionMap::M.Map SHA Address->ContextM ()
-putTransactionMap tm = do
+putWSTT::(Transaction->Address)->ContextM ()
+putWSTT wstt = do
   cxt <- get
-  put cxt{transactionMap=tm}
+  put cxt{contextWhoSignedThisTransaction=wstt}
 
 incrementNonce::(HasMemAddressStateDB m, HasStateDB m, HasHashDB m)=>
                 Address->m ()

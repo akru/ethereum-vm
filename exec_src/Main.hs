@@ -46,7 +46,7 @@ main = do
 
     liftIO $ putStrLn "creating transactionMap"
     let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
-    putTransactionMap tm
+    putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
     liftIO $ putStrLn "done creating transactionMap"
 
     forM_ blocks $ \b -> do
