@@ -23,6 +23,8 @@ import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Mining.Dummy
+import Blockchain.Mining.Instant
+import Blockchain.Mining.SHA
 import Blockchain.VMOptions
 import Blockchain.SHA
 
@@ -75,11 +77,13 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
+verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
+
 checkValidity::Monad m=>Bool->Block->Block->ContextM (m ())
 checkValidity partialBlock parent b = do
   checkParentChildValidity b parent
   when (flags_miningVerification && not partialBlock) $ do
-    let miningVerified = (verify dummyMiner) b
+    let miningVerified = (verify verifier) b
     unless miningVerified $ fail "block falsEEEly mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
