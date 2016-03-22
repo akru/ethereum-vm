@@ -168,7 +168,9 @@ addTransaction isRunningTests' b remainingBlockGas t = do
 
   nonceValid <- lift $ isNonceValid t
 
-  let intrinsicGas' = intrinsicGas t
+  let isHomestead = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
+      intrinsicGas' = intrinsicGas isHomestead t
+
   when flags_debug $
     liftIO $ do
       putStrLn $ "bytes cost: " ++ show (gTXDATAZERO * (fromIntegral $ zeroBytesLength t) + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - (fromIntegral $ zeroBytesLength t)))
@@ -197,7 +199,7 @@ addTransaction isRunningTests' b remainingBlockGas t = do
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction isRunningTests' b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
+        (result, newVMState') <- lift $ runCodeForTransaction isRunningTests' isHomestead b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
         s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
         when (not s1) $ error "addToBalance failed even after a check in addBlock"
@@ -249,19 +251,19 @@ addTransaction isRunningTests' b remainingBlockGas t = do
             remainingBlockGas
           )
 
-runCodeForTransaction::Bool->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction isRunningTests' b availableGas tAddr newAddress ut | isContractCreationTX ut = do
+runCodeForTransaction::Bool->Bool->Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction isRunningTests' isHomestead b availableGas tAddr newAddress ut | isContractCreationTX ut = do
   when flags_debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   (result, vmState) <-
-    create isRunningTests' S.empty b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
+    create isRunningTests' isHomestead S.empty b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction isRunningTests' b availableGas tAddr owner ut = do --MessageTX
+runCodeForTransaction isRunningTests' isHomestead b availableGas tAddr owner ut = do --MessageTX
   when flags_debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
-  call isRunningTests' S.empty b 0 owner owner tAddr
+  call isRunningTests' isHomestead False S.empty b 0 owner owner tAddr
           (fromIntegral $ transactionValue ut) (fromIntegral $ transactionGasPrice ut)
           (transactionData ut) (fromIntegral availableGas) tAddr
 
@@ -278,11 +280,12 @@ zeroBytesLength t = length $ filter (==0) $ B.unpack codeBytes' --is ContractCre
                   where
                     Code codeBytes' = transactionInit t
 
-intrinsicGas::Transaction->Integer
-intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
+intrinsicGas::Bool->Transaction->Integer
+intrinsicGas isHomestead t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + (txCost t)
     where
       zeroLen = fromIntegral $ zeroBytesLength t
---intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
+      txCost t | isMessageTX t = gTX
+      txCost _ = if isHomestead then gCREATETX else gTX
 
 
 printTransactionMessage::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))

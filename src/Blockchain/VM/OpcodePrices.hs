@@ -101,10 +101,11 @@ opGasPrice x = error $ "Missing opcode in opCodePrice: " ++ show x
 
 
 
-
+gHomesteadFirstBlock = 1150000
 
 
 gTX = 21000
+gCREATETX = 53000
 gTXDATANONZERO = 68
 gTXDATAZERO = 4
 

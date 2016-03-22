@@ -64,6 +64,7 @@ data DebugCallCreate =
 
 data VMState =
   VMState {
+    vmIsHomestead::Bool,
     dbs::Context,
     vmGasRemaining::Integer,
     pc::Word256,
@@ -97,11 +98,12 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::Bool->Environment->Context->IO VMState
-startingState isRunningTests' env dbs' = do
+startingState::Bool->Bool->Environment->Context->IO VMState
+startingState isRunningTests' isHomestead env dbs' = do
   m <- newMemory
   return VMState 
              {
+               vmIsHomestead=isHomestead,
                dbs = dbs',
                pc = 0,
                done=False,
