@@ -42,12 +42,13 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-checkParentChildValidity::(Monad m)=>Block->BlockSummary->m ()
-checkParentChildValidity Block{blockBlockData=c} parentBSum = do
-    unless (blockDataDifficulty c == nextDifficulty flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
+checkParentChildValidity::(Monad m)=>Bool->Block->BlockSummary->m ()
+checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
+    let nextDifficulty' = if isHomestead then homesteadNextDifficulty else nextDifficulty
+    unless (blockDataDifficulty c == nextDifficulty' flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
              $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++
                    "', expected '" ++
-                   show (nextDifficulty flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c)) ++ "'"
+                   show (nextDifficulty' flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c)) ++ "'"
     unless (blockDataNumber c == bSumNumber parentBSum + 1) 
              $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (bSumNumber parentBSum + 1) ++ "'"
     unless (blockDataGasLimit c <= bSumGasLimit parentBSum +  nextGasLimitDelta (bSumGasLimit parentBSum))
@@ -62,9 +63,9 @@ checkParentChildValidity Block{blockBlockData=c} parentBSum = do
 
 verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
 
-checkValidity::Monad m=>Bool->BlockSummary->Block->ContextM (m ())
-checkValidity partialBlock parentBSum b = do
-  checkParentChildValidity b parentBSum
+checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
+checkValidity partialBlock isHomestead parentBSum b = do
+  checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
     let miningVerified = (verify verifier) b
     unless miningVerified $ fail "block falsely mined, verification failed"

@@ -136,7 +136,7 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return b
 
-  valid <- checkValidity (blockDataStateRoot (blockBlockData b) == MP.SHAPtr "") bSum b'
+  valid <- checkValidity (blockDataStateRoot (blockBlockData b) == MP.SHAPtr "") (blockIsHomestead b) bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err
@@ -161,6 +161,9 @@ addTransactions b blockGas (t:rest) = do
 
   addTransactions b remainingBlockGas rest
 
+blockIsHomestead::Block->Bool
+blockIsHomestead b = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
+
 addTransaction::Bool->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
 addTransaction isRunningTests' b remainingBlockGas t = do
   --let tAddr = fromJust $ whoSignedThisTransaction t
@@ -168,7 +171,7 @@ addTransaction isRunningTests' b remainingBlockGas t = do
 
   nonceValid <- lift $ isNonceValid t
 
-  let isHomestead = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
+  let isHomestead = blockIsHomestead b
       intrinsicGas' = intrinsicGas isHomestead t
 
   when flags_debug $
