@@ -45,7 +45,6 @@ library
                  , persistent-postgresql
                  , postgresql-simple
                  , resourcet
-                 , SHA2
                  , strato-adit
                  , strato-conf
                  , time
