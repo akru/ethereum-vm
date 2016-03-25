@@ -44,6 +44,7 @@ import Blockchain.Data.LogDB
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
+import qualified Blockchain.DB.AddressStateDB as NoCache
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
@@ -324,7 +325,9 @@ printTransactionMessage t b f = do
       beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
       afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
       afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
+      modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
 
+  newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
 
   --stateRootAfter <- fmap MP.stateRoot getStateDB
 
@@ -349,7 +352,7 @@ printTransactionMessage t b f = do
              transactionResultTrace=theTrace',
              transactionResultGasUsed=0,
              transactionResultEtherUsed=0,
-             transactionResultContractsCreated=intercalate "," $ map formatAddress $ S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes),
+             transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
              transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
              transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
              transactionResultTime=realToFrac $ after - before::Double,
