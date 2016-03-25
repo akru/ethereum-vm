@@ -17,6 +17,7 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.List
+import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Time.Clock.POSIX
@@ -307,7 +308,9 @@ printTransactionMessage t b f = do
     ) ++ CL.magenta " |"
 
 
-  stateRootBefore <- fmap MP.stateRoot getStateDB
+  --stateRootBefore <- fmap MP.stateRoot getStateDB
+
+  beforeMap <- getAddressStateDBMap
 
   before <- liftIO $ getPOSIXTime 
 
@@ -315,11 +318,19 @@ printTransactionMessage t b f = do
 
   after <- liftIO $ getPOSIXTime 
 
-  stateRootAfter <- fmap MP.stateRoot getStateDB
+  afterMap <- getAddressStateDBMap
+
+  let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
+      beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
+      afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
+      afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
+
+
+  --stateRootAfter <- fmap MP.stateRoot getStateDB
 
   when flags_createTransactionResults $ do
-    mpdb <- getStateDB
-    addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
+    --mpdb <- getStateDB
+    --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
     let (resultString, response, theTrace', theLogs) =
           case result of 
@@ -338,9 +349,9 @@ printTransactionMessage t b f = do
              transactionResultTrace=theTrace',
              transactionResultGasUsed=0,
              transactionResultEtherUsed=0,
-             transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
-             transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
-             transactionResultStateDiff=BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
+             transactionResultContractsCreated=intercalate "," $ map formatAddress $ S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes),
+             transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
+             transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
              transactionResultTime=realToFrac $ after - before::Double,
              transactionResultNewStorage="",
              transactionResultDeletedStorage=""
