@@ -19,7 +19,6 @@ import Data.Binary
 import qualified Data.ByteString.Lazy as BL
 import Data.Maybe
 import Data.Time
-import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as LDB
     
@@ -82,6 +81,7 @@ instance RLPSerializable BlockSummary where
       bSumTimestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode ts,
       bSumNumber = rlpDecode n
       }
+  rlpDecode x = error $ "rlpDecode for BlockSummary called with data of wrong format: " ++ show x
 
                   
 getBSum::(MonadResource m, HasBlockSummaryCacheDB m)=>SHA->m BlockSummary

@@ -22,7 +22,6 @@ import Control.Monad.Trans.Resource
 import Control.Monad.State
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.Map as M
-import Data.Maybe
 import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
 import System.Directory
@@ -46,7 +45,6 @@ import Blockchain.Constants
 import Blockchain.EthConf
 import Blockchain.ExtWord
 import Blockchain.VMOptions
-import Blockchain.SHA
 
 --import Debug.Trace
 
@@ -102,6 +100,7 @@ instance HasSQLDB ContextM where
 connStr'::SQL.ConnectionString
 connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=" ++ show (port $ sqlConfig ethConf)
 
+runContextM::ContextM a->IO ()
 runContextM f = do
   homeDir <- getHomeDirectory
   createDirectoryIfMissing False $ homeDir </> dbDir "h"

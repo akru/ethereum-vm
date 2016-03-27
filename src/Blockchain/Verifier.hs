@@ -61,6 +61,7 @@ checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
+verifier::Miner
 verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
 
 checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())

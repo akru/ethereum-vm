@@ -629,8 +629,6 @@ runOperation DELEGATECALL = do
   
       vmState <- lift get
   
-      addressState <- getAddressState owner
-  
       callDepth' <- getCallDepth
   
       (result, maybeBytes) <-

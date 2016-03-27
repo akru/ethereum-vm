@@ -15,7 +15,6 @@ import Control.Monad.Trans.Either
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as BL
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
@@ -23,11 +22,6 @@ import qualified Data.Set as S
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
-
-import Control.Monad.Trans.Resource
-import qualified Database.Persist.Postgresql as SQL
-import qualified Database.Esqueleto as E
-import Blockchain.DB.SQLDB
 
 import Blockchain.BlockSummaryCacheDB
 import qualified Blockchain.Colors as CL
@@ -59,8 +53,6 @@ import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
-
-import qualified Data.Aeson as Aeson (encode)
 
 --import Debug.Trace
 
@@ -222,9 +214,9 @@ addTransaction isRunningTests' b remainingBlockGas t = do
             when (not success') $ error "oops, refund was too much"
 
             when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList (suicideList newVMState'))
-            forM_ (S.toList $ suicideList newVMState') $ \address -> do
-              lift $ purgeStorageMap address
-              lift $ deleteAddressState address
+            forM_ (S.toList $ suicideList newVMState') $ \address' -> do
+              lift $ purgeStorageMap address'
+              lift $ deleteAddressState address'
                          
         
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
@@ -251,6 +243,7 @@ addTransaction isRunningTests' b remainingBlockGas t = do
                theTrace=error "theTrace not set",
                environment=error "environment not set",
                isRunningTests=isRunningTests',
+               vmIsHomestead=error "isHomestead is not set",
                debugCallCreates=Nothing
                },
             remainingBlockGas
@@ -289,7 +282,7 @@ intrinsicGas::Bool->Transaction->Integer
 intrinsicGas isHomestead t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + (txCost t)
     where
       zeroLen = fromIntegral $ zeroBytesLength t
-      txCost t | isMessageTX t = gTX
+      txCost t' | isMessageTX t' = gTX
       txCost _ = if isHomestead then gCREATETX else gTX
 
 
@@ -394,6 +387,5 @@ replaceBestIfBetter b = do
   when (newNumber > blockDataNumber oldBestBlock) $ do
 
     when flags_sqlDiff $ do
-      let newStateRoot = blockDataStateRoot (blockBlockData b)
       sqlDiff newNumber (blockDataStateRoot oldBestBlock) newStateRoot
       putBestBlockInfo (blockHash b) (blockBlockData b)

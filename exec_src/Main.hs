@@ -3,31 +3,20 @@
 import Control.Lens hiding (Context)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Resource
 import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
-import qualified Database.LevelDB as DB
-import Database.PostgreSQL.Simple
 import HFlags
 
 import Network.Kafka
-import Network.Kafka.Consumer
 import Network.Kafka.Protocol
                     
-import System.Directory
-import System.FilePath
 import System.IO
 
 import Blockchain.BlockSummaryCacheDB
 import Blockchain.BlockChain
-import Blockchain.Constants
 import Blockchain.Data.BlockDB
-import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
-import qualified Blockchain.Database.MerklePatricia as MP
-import Blockchain.DBM
 import Blockchain.VMOptions
 import Blockchain.VMContext
 

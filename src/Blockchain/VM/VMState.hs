@@ -12,7 +12,6 @@ module Blockchain.VM.VMState (
 import Control.Monad
 import qualified Data.Vector.Storable.Mutable as V
 import qualified Data.ByteString as B
-import qualified Data.Map as M
 import Data.IORef
 import qualified Data.Set as S
 import Data.Word
@@ -20,12 +19,9 @@ import Data.Word
 
 import Blockchain.VMContext
 import Blockchain.Data.Address
-import Blockchain.Data.AddressStateDB
 import Blockchain.Data.Log
-import Blockchain.DB.MemAddressStateDB
 import Blockchain.ExtWord
 import Blockchain.Format
-import Blockchain.SHA
 import Blockchain.VM.Environment
 
 data VMException =

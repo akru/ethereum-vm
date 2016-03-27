@@ -15,6 +15,7 @@ import Blockchain.VM.Opcodes
 
 getOperationAt::Code->Word256->(Operation, Word256)
 getOperationAt (Code bytes) p = getOperationAt' bytes p
+getOperationAt (PrecompiledCode _) _ = error "getOperationAt called for precompilded code"
 
 getOperationAt'::B.ByteString->Word256->(Operation, Word256)
 getOperationAt' rom p = opCode2Op $ safeDrop p rom
@@ -38,10 +39,12 @@ getValidJUMPDESTs (Code bytes) =
     getOps code p = (p, op):getOps code (p+len)
       where
         (op, len) = getOperationAt' code p
+getValidJUMPDESTs (PrecompiledCode _) = error "getValidJUMPDESTs called on precompiled code"
 
 
 codeLength::Code->Int
 codeLength (Code bytes) = B.length bytes
+codeLength (PrecompiledCode _) = error "codeLength called on precompiled code"
 
 compile::[Operation]->Code
 compile x = Code bytes
