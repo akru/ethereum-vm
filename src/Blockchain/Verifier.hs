@@ -69,7 +69,7 @@ checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
 verifier::Miner
 verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
 
-addAllKVs::MonadResource m=>MP.MPDB->[(Integer, Transaction)]->m MP.MPDB
+addAllKVs::RLPSerializable obj=>MonadResource m=>MP.MPDB->[(Integer, obj)]->m MP.MPDB
 addAllKVs x [] = return x
 addAllKVs mpdb (x:rest) = do
   mpdb' <- MP.unsafePutKeyVal mpdb (byteString2NibbleString $ rlpSerialize $ rlpEncode $ fst x) (rlpEncode $ rlpSerialize $ rlpEncode $ snd x)
@@ -81,10 +81,15 @@ verifyTransactionRoot b = do
   MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ blockReceiptTransactions b
   return (blockDataTransactionsRoot (blockBlockData b) == sr)
 
+verifyOmmersRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
+verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray $ map rlpEncode $ blockBlockUncles b)
+
 checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
   trVerified <- verifyTransactionRoot b
   when (not trVerified) $ error "transactionRoot doesn't match transactions"
+  ommersVerified <- verifyOmmersRoot b
+  when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
     let miningVerified = (verify verifier) b
