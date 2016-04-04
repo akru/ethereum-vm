@@ -86,8 +86,9 @@ verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rl
 
 checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
-  trVerified <- verifyTransactionRoot b
-  when (not trVerified) $ error "transactionRoot doesn't match transactions"
+  when (flags_transactionRootVerification) $ do
+           trVerified <- verifyTransactionRoot b
+           when (not trVerified) $ error "transactionRoot doesn't match transactions"
   ommersVerified <- verifyOmmersRoot b
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum
