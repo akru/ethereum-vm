@@ -15,7 +15,7 @@ import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.Mining
-import Blockchain.Mining.Dummy
+import Blockchain.Mining.Normal
 import Blockchain.Mining.Instant
 import Blockchain.Mining.SHA
 import Blockchain.SHA
@@ -62,7 +62,7 @@ checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
     return ()
 
 verifier::Miner
-verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
+verifier = (if (flags_miner == Normal) then normalMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
 
 checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
