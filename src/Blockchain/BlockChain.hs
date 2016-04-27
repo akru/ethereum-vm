@@ -313,46 +313,47 @@ printTransactionMessage t b f = do
   after <- liftIO $ getPOSIXTime 
 
   afterMap <- getAddressStateDBMap
-
-  let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
-      beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
-      afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
-      afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
-      modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
-
-  newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
-
+ 
   --stateRootAfter <- fmap MP.stateRoot getStateDB
+      
+  unless (blockDataStateRoot (blockBlockData b) == MP.SHAPtr "") $ --TODO fix this, we are using this to communicate between strato-quarry and ethereum-vm, but anyone could submit a block with stateroot "" and cause trouble.
+    when flags_createTransactionResults $ do
+      let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
+          beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
+          afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
+          afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
+          modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
 
-  when flags_createTransactionResults $ do
-    --mpdb <- getStateDB
-    --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
+      newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
 
-    let (resultString, response, theTrace', theLogs) =
-          case result of 
-            Left err -> (err, "", [], []) --TODO keep the trace when the run fails
-            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+      --mpdb <- getStateDB
+      --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
-    forM_ theLogs $ \log' -> do
-      putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
-                                 
-    _ <- putTransactionResult $
-           TransactionResult {
-             transactionResultBlockHash=blockHash b,
-             transactionResultTransactionHash=transactionHash t,
-             transactionResultMessage=resultString,
-             transactionResultResponse=response,
-             transactionResultTrace=theTrace',
-             transactionResultGasUsed=0,
-             transactionResultEtherUsed=0,
-             transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
-             transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
-             transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
-             transactionResultTime=realToFrac $ after - before::Double,
-             transactionResultNewStorage="",
-             transactionResultDeletedStorage=""
-             } 
-    return ()
+      let (resultString, response, theTrace', theLogs) =
+            case result of 
+              Left err -> (err, "", [], []) --TODO keep the trace when the run fails
+              Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+
+      forM_ theLogs $ \log' -> do
+        putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
+                                   
+      _ <- putTransactionResult $
+             TransactionResult {
+               transactionResultBlockHash=blockHash b,
+               transactionResultTransactionHash=transactionHash t,
+               transactionResultMessage=resultString,
+               transactionResultResponse=response,
+               transactionResultTrace=theTrace',
+               transactionResultGasUsed=0,
+               transactionResultEtherUsed=0,
+               transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
+               transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
+               transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
+               transactionResultTime=realToFrac $ after - before::Double,
+               transactionResultNewStorage="",
+               transactionResultDeletedStorage=""
+               } 
+      return ()
 
   --clearDebugMsg
 
