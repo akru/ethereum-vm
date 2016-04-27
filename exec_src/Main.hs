@@ -19,6 +19,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Transaction
 import Blockchain.VMOptions
 import Blockchain.VMContext
+import Blockchain.Stream.VMEvent
 
 main::IO ()
 main = do
@@ -56,7 +57,8 @@ getUnprocessedKafkaBlocks offsetIORef = do
         --offset <- getLastOffset LatestTime 0 "thetopic"
         offset <- liftIO $ readIORef offsetIORef
         liftIO $ putStrLn $ "Fetching recently mined blocks with offset " ++ (show offset)
-        result <- fetchBlocks $ Offset $ fromIntegral offset
+        vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
+        let result = [b | ChainBlock b <- vmEvents]
         liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length result)
         return result
 

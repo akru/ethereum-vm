@@ -46,6 +46,7 @@ import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
+import Blockchain.Stream.UnminedBlock
 import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verifier
