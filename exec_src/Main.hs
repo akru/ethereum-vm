@@ -52,11 +52,13 @@ main = do
 
     when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
-      block <- SQL.runSqlPool makeNewBlock pool
-      let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
-      putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-      addBlocks [(blockHash block, block)]
-
+      maybeBlock <- SQL.runSqlPool makeNewBlock pool
+      case maybeBlock of
+       Just block -> do
+         let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
+         putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
+         addBlocks [(blockHash block, block)]
+       Nothing -> return ()
 
   return ()
 
