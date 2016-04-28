@@ -52,9 +52,10 @@ main = do
 
     when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
-      block <- 
-        SQL.runSqlPool makeNewBlock pool
-      addBlocks [(blockHash block, block)]
+      blockM <- SQL.runSqlPool makeNewBlock pool
+      when (isJust blockM) $ do
+        let block = fromJust blockM
+        addBlocks [(blockHash block, block)]
 
 
   return ()
