@@ -6,6 +6,7 @@ import Control.Monad.IO.Class
 import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
+import qualified Database.Persist.Postgresql as SQL
 import HFlags
 
 import Network.Kafka
@@ -17,9 +18,12 @@ import Blockchain.BlockSummaryCacheDB
 import Blockchain.BlockChain
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Transaction
+import Blockchain.DB.SQLDB
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
+
+import Blockchain.Quarry
 
 main::IO ()
 main = do
@@ -32,7 +36,9 @@ main = do
 
   runContextM $ forever $ do
     liftIO $ putStrLn "Getting Blocks"
-    blocks <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
+    vmEvents <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
+
+    let blocks = [b | ChainBlock b <- vmEvents]
 
     liftIO $ putStrLn "creating transactionMap"
     let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
@@ -44,10 +50,16 @@ main = do
                        
     addBlocks $ map (\b -> (blockHash b, b)) blocks
 
+    when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
+      pool <- getSQLDB
+      block <- 
+        SQL.runSqlPool makeNewBlock pool
+      addBlocks [(blockHash block, block)]
+
 
   return ()
 
-getUnprocessedKafkaBlocks::IORef Integer->IO [Block]
+getUnprocessedKafkaBlocks::IORef Integer->IO [VMEvent]
 getUnprocessedKafkaBlocks offsetIORef = do
   ret <-
       runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
@@ -58,9 +70,8 @@ getUnprocessedKafkaBlocks offsetIORef = do
         offset <- liftIO $ readIORef offsetIORef
         liftIO $ putStrLn $ "Fetching recently mined blocks with offset " ++ (show offset)
         vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
-        let result = [b | ChainBlock b <- vmEvents]
-        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length result)
-        return result
+        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length vmEvents)
+        return vmEvents
 
   case ret of
     Left e -> error $ show e
