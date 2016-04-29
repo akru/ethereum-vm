@@ -970,6 +970,9 @@ create' = do
   let codeBytes' = fromMaybe B.empty $ returnVal vmState
   when flags_debug $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
+  liftIO $ putStrLn $ "Trying to create contract\n" ++
+        "The amount of ether you need: " ++ show (gCREATEDATA * toInteger (B.length codeBytes')) ++ "\n" ++
+        "The amount of ether you have: " ++ show (vmGasRemaining vmState)
   
   if (not $ vmIsHomestead vmState) && (vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes'))
     then do
