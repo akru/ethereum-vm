@@ -973,7 +973,9 @@ create' = do
   
   if (not $ vmIsHomestead vmState) && (vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes'))
     then do
-      liftIO $ putStrLn $ CL.red "Not enough ether to create contract, contract being thrown away (account was created though)"
+      liftIO $ putStrLn $ CL.red $ "Not enough ether to create contract, contract being thrown away (account was created though)\n" ++
+        "The amount of ether you need: " ++ show (gCREATEDATA * toInteger (B.length codeBytes')) ++ "\n" ++
+        "The amount of ether you have: " ++ show (vmGasRemaining vmState)
       lift $ put vmState{returnVal=Nothing}
       assignCode "" owner
       return $ Code ""
