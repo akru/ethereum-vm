@@ -138,7 +138,7 @@ mLoadByteString p size = do
   return val
 
 unsafeSliceByteString::Word256->Word256->VMM B.ByteString
-unsafeSliceByteString p 0 = return $ B.empty
+unsafeSliceByteString _ 0 = return $ B.empty
 unsafeSliceByteString p size = do
   setNewMaxSize (fromIntegral p+fromIntegral size)
   state <- lift get
@@ -160,7 +160,7 @@ mStore8 p val = do
   liftIO $ V.write (mVector $ memory state) (fromIntegral p) val
 
 mStoreByteString::Word256->B.ByteString->VMM ()
-mStoreByteString p theData | B.null theData = return () --no need to charge gas for mem change if nothing set
+mStoreByteString _ theData | B.null theData = return () --no need to charge gas for mem change if nothing set
 mStoreByteString p theData = do
   setNewMaxSize (fromIntegral p + fromIntegral (B.length theData))
   state <- lift get

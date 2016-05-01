@@ -6,15 +6,12 @@ module Blockchain.VM.PrecompiledContracts (
 
 import Prelude hiding (LT, GT, EQ)
 
-import Control.Monad.IO.Class
-import qualified Codec.Digest.SHA as SHA2
+import qualified Crypto.Hash.SHA256 as SHA2
 import qualified Crypto.Hash.RIPEMD160 as RIPEMD
 import Data.Binary hiding (get, put)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Network.Haskoin.Internals (Signature(..))
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import Numeric
 
 import Blockchain.Data.Address
 import Blockchain.ExtendedECDSA
@@ -47,7 +44,7 @@ sha2::B.ByteString->B.ByteString
 sha2 input =
 --    let val = fromInteger $ byteString2Integer $ B.take 32 input
 --    in
-     SHA2.hash SHA2.SHA256 input
+     SHA2.hash input
 
 callPrecompiledContract::Word160->B.ByteString->VMM B.ByteString
 callPrecompiledContract 0 _ = return B.empty

@@ -11,29 +11,38 @@ import Control.Monad.Trans.State
 import qualified Data.ByteString as B
 import qualified Data.Set as S
 
-import Blockchain.VMContext
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
+import Blockchain.DB.MemAddressStateDB
+import Blockchain.DB.StorageDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DB.StateDB
-import Blockchain.DB.StorageDB
 import Blockchain.DB.SQLDB
-import Blockchain.ExtDBs
 import Blockchain.ExtWord
+import Blockchain.SHA
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
-import Blockchain.SHA
+import Blockchain.VMContext
 
-type VMM = EitherT VMException (StateT VMState (ResourceT IO))
+type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO)))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
 --TODO- Do I really need this?  Is it bad that it is undefined?
 instance MonadResource VMM where
   liftResourceT = error "liftResourceT undefined for VMM"
-  
+
+instance HasMemAddressStateDB VMM where
+  getAddressStateDBMap = do
+      cxt <- lift get
+      return $ contextAddressStateDBMap $ dbs cxt
+  putAddressStateDBMap theMap = do
+      cxt <- lift get
+      lift $ put cxt{dbs=(dbs cxt){contextAddressStateDBMap=theMap}}
+
 instance HasHashDB VMM where
     getHashDB = lift $ fmap (contextHashDB . dbs) get
 
@@ -44,8 +53,15 @@ instance HasStateDB VMM where
       lift $ put vmState{dbs=(dbs vmState){contextStateDB=(contextStateDB $ dbs vmState){MP.stateRoot=x}}}
 
 instance HasStorageDB VMM where
-    getStorageDB = lift $ fmap (MP.ldb . contextStateDB . dbs) get --storage uses the state db also
+    getStorageDB = do
+      cxt <- lift get
+      return (MP.ldb $ contextStateDB $ dbs cxt, --storage uses the state db also
+              contextStorageMap $ dbs cxt)
+    putStorageMap theMap = do
+      cxt <- lift get
+      lift $ put cxt{dbs=(dbs cxt){contextStorageMap=theMap}}
 
+        
 instance HasCodeDB VMM where
     getCodeDB = lift $ fmap (contextCodeDB . dbs) get
 
@@ -202,16 +218,10 @@ getAllStorageKeyVals = do
   owner <- getEnvVar envOwner
   getAllStorageKeyVals' owner
 
-
 putStorageKeyVal::Word256->Word256->VMM ()
 putStorageKeyVal key val = do
   owner <- getEnvVar envOwner
   putStorageKeyVal' owner key val
-
-deleteStorageKey::Word256->VMM ()
-deleteStorageKey key = do
-  owner <- getEnvVar envOwner
-  deleteStorageKey' owner key
 
 vmTrace::String->VMM ()
 vmTrace msg = do

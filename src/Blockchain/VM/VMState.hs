@@ -22,7 +22,6 @@ import Blockchain.Data.Address
 import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format
-import Blockchain.SHA
 import Blockchain.VM.Environment
 
 data VMException =
@@ -61,6 +60,7 @@ data DebugCallCreate =
 
 data VMState =
   VMState {
+    vmIsHomestead::Bool,
     dbs::Context,
     vmGasRemaining::Integer,
     pc::Word256,
@@ -80,7 +80,6 @@ data VMState =
     
     vmException::Maybe VMException,
 
-
     --These last two variable are only used for the Ethereum tests.
     isRunningTests::Bool,
     debugCallCreates::Maybe [DebugCallCreate]
@@ -95,11 +94,12 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::Bool->Environment->Context->IO VMState
-startingState isRunningTests' env dbs' = do
+startingState::Bool->Bool->Environment->Context->IO VMState
+startingState isRunningTests' isHomestead env dbs' = do
   m <- newMemory
   return VMState 
              {
+               vmIsHomestead=isHomestead,
                dbs = dbs',
                pc = 0,
                done=False,
@@ -114,7 +114,7 @@ startingState isRunningTests' env dbs' = do
                logs=[],
                environment=env,
                suicideList=S.empty,
-               
+
                --only used for running ethereum tests
                isRunningTests=isRunningTests',
                debugCallCreates=Nothing

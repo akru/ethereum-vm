@@ -6,37 +6,28 @@ module Blockchain.Verifier (
   ) where
 
 import Control.Monad
-import Data.Binary hiding (get)
-import Data.Bits
-import qualified Data.ByteString.Lazy as BL
---import Data.Maybe
-import Data.Time
-import Data.Time.Clock.POSIX
+import Control.Monad.Trans.Resource
 
-import Blockchain.VMContext
+import Blockchain.BlockSummaryCacheDB
+import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
-import Blockchain.Constants
-import Blockchain.ExtDBs
-import Blockchain.Format
+import qualified Blockchain.Database.MerklePatricia.Internal as MP
+import Blockchain.DB.MemAddressStateDB
+import Blockchain.DB.StateDB
 import Blockchain.Mining
-import Blockchain.Mining.Dummy
+import Blockchain.Mining.Normal
 import Blockchain.Mining.Instant
 import Blockchain.Mining.SHA
-import Blockchain.VMOptions
 import Blockchain.SHA
+import Blockchain.Util
+import Blockchain.VMContext
+import Blockchain.VMOptions
+
 
 --import Debug.Trace
-
-{-
-initializeBlockChain::ContextM ()
-initializeBlockChain = do
-  let bytes = rlpSerialize $ rlpEncode genesisBlock
-  blockDBPut (BL.toStrict $ encode $ blockHash $ genesisBlock) bytes
-  detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
--}
 
 {-
 nextGasLimit::Integer->Integer->Integer
@@ -56,40 +47,57 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-verifyStateRootExists::Block->ContextM Bool
-verifyStateRootExists b = do
-  val' <- stateDBGet (BL.toStrict $ encode $ blockDataStateRoot $ blockBlockData b)
-  case val' of
-    Nothing -> return False
-    Just _ -> return True
-
-checkParentChildValidity::(Monad m)=>Block->Block->m ()
-checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
-    unless (blockDataDifficulty c == nextDifficulty flags_testnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty flags_testnet (blockDataNumber p) (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
-    unless (blockDataNumber c == blockDataNumber p + 1) 
-             $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
-    unless (blockDataGasLimit c <= blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p))
-             $ fail $ "Block gasLimit is too high: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
-    unless (blockDataGasLimit c >= blockDataGasLimit p - nextGasLimitDelta (blockDataGasLimit p))
-             $ fail $ "Block gasLimit is too low: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p -  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
+checkParentChildValidity::(Monad m)=>Bool->Block->BlockSummary->m ()
+checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
+    let nextDifficulty' = if isHomestead then homesteadNextDifficulty else nextDifficulty
+    unless (blockDataDifficulty c == nextDifficulty' flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
+             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++
+                   "', expected '" ++
+                   show (nextDifficulty' flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c)) ++ "'"
+    unless (blockDataNumber c == bSumNumber parentBSum + 1) 
+             $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (bSumNumber parentBSum + 1) ++ "'"
+    unless (blockDataGasLimit c <= bSumGasLimit parentBSum +  nextGasLimitDelta (bSumGasLimit parentBSum))
+             $ fail $ "Block gasLimit is too high: got '" ++ show (blockDataGasLimit c) ++
+                   "', should be less than '" ++ show (bSumGasLimit parentBSum +  nextGasLimitDelta (bSumGasLimit parentBSum)) ++ "'"
+    unless (blockDataGasLimit c >= bSumGasLimit parentBSum - nextGasLimitDelta (bSumGasLimit parentBSum))
+             $ fail $ "Block gasLimit is too low: got '" ++ show (blockDataGasLimit c) ++
+                   "', should be less than '" ++ show (bSumGasLimit parentBSum -  nextGasLimitDelta (bSumGasLimit parentBSum)) ++ "'"
     unless (blockDataGasLimit c >= minGasLimit flags_testnet)
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
-verifier = (if (flags_miner == Dummy) then dummyMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
+verifier::Miner
+verifier = (if (flags_miner == Normal) then normalMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
 
-checkValidity::Monad m=>Bool->Block->Block->ContextM (m ())
-checkValidity partialBlock parent b = do
-  checkParentChildValidity b parent
+addAllKVs::RLPSerializable obj=>MonadResource m=>MP.MPDB->[(Integer, obj)]->m MP.MPDB
+addAllKVs x [] = return x
+addAllKVs mpdb (x:rest) = do
+  mpdb' <- MP.unsafePutKeyVal mpdb (byteString2NibbleString $ rlpSerialize $ rlpEncode $ fst x) (rlpEncode $ rlpSerialize $ rlpEncode $ snd x)
+  addAllKVs mpdb' rest
+
+verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
+verifyTransactionRoot b = do
+  mpdb <- getStateDB
+  MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ blockReceiptTransactions b
+  return (blockDataTransactionsRoot (blockBlockData b) == sr)
+
+verifyOmmersRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
+verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray $ map rlpEncode $ blockBlockUncles b)
+
+checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
+checkValidity partialBlock isHomestead parentBSum b = do
+  when (flags_transactionRootVerification) $ do
+           trVerified <- verifyTransactionRoot b
+           when (not trVerified) $ error "transactionRoot doesn't match transactions"
+  ommersVerified <- verifyOmmersRoot b
+  when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
+  checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
     let miningVerified = (verify verifier) b
-    unless miningVerified $ fail "block falsEEEly mined, verification failed"
+    unless miningVerified $ fail "block falsely mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
   unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
-  stateRootExists <- verifyStateRootExists b
-  unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (blockDataStateRoot $ blockBlockData b))
   return $ return ()
 
 

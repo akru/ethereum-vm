@@ -1,67 +1,29 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 
+import Control.Lens hiding (Context)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Resource
-import Data.Time.Clock
-import qualified Data.ByteString as B
+import Data.IORef
+import Data.Maybe
 import qualified Data.Map as M
-import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
-import Database.PostgreSQL.Simple
-import qualified Database.Esqueleto as E
 import HFlags
-import System.Directory
-import System.FilePath
+
+import Network.Kafka
+import Network.Kafka.Protocol
+                    
 import System.IO
 
+import Blockchain.BlockSummaryCacheDB
 import Blockchain.BlockChain
-import Blockchain.Constants
-import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
-import Blockchain.Data.DataDefs
-import Blockchain.DB.DetailsDB
 import Blockchain.Data.Transaction
-import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.SQLDB
-import Blockchain.DBM
 import Blockchain.VMOptions
-import Blockchain.Trigger
-import Blockchain.SHA
-import Blockchain.Verifier
 import Blockchain.VMContext
-import qualified Network.Haskoin.Internals as H
+import Blockchain.Stream.VMEvent
 
-coinbasePrvKey::H.PrvKey
-Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
-
-getNextBlock::Block->[Transaction]->IO Block
-getNextBlock b transactions = do
-  ts <- getCurrentTime
-  let bd = blockBlockData b
-  return Block{
-               blockBlockData=
-               BlockData {
-                 blockDataParentHash=blockHash b,
-                 blockDataUnclesHash=hash$ B.pack [0xc0],
-                 blockDataCoinbase=prvKey2Address coinbasePrvKey,
-                 blockDataStateRoot = MP.SHAPtr "",
-                 blockDataTransactionsRoot = MP.emptyTriePtr,
-                 blockDataReceiptsRoot = MP.emptyTriePtr,
-                 blockDataLogBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
-                 blockDataDifficulty = nextDifficulty flags_testnet (blockDataNumber bd) (blockDataDifficulty bd) (blockDataTimestamp bd) ts,
-                 blockDataNumber = blockDataNumber bd + 1,
-                 blockDataGasLimit = blockDataGasLimit bd,
-                 blockDataGasUsed = 0,
-                 blockDataTimestamp = ts,  
-                 blockDataExtraData = 0,
-                 blockDataMixHash = SHA 0,
-                 blockDataNonce = 5
-               },
-               blockReceiptTransactions=transactions,
-               blockBlockUncles=[]
-             }
+import Blockchain.Quarry
 
 main::IO ()
 main = do
@@ -70,82 +32,50 @@ main = do
 
   _ <- $initHFlags "The Ethereum Haskell Peer"
 
-  homeDir <- getHomeDirectory
-  createDirectoryIfMissing False $ homeDir </> dbDir "h"
+  offsetIORef <- liftIO $ newIORef flags_startingBlock
 
-  _ <-
-    runResourceT $ do
-      dbs <- openDBs
-      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
-             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+  runContextM $ forever $ do
+    liftIO $ putStrLn "Getting Blocks"
+    vmEvents <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
 
-      conn <- liftIO $ connectPostgreSQL "host=localhost dbname=eth user=postgres password=api port=5432"
-      _ <- liftIO $ setupTrigger conn
-      
-      flip runStateT (Context
-                           MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
-                           hdb
-                           cdb
-                           (sqlDB' dbs)
-                           Nothing
-                           M.empty) $ 
-          forever $ do
-            liftIO $ putStrLn "Getting Blocks"
-            blocks <- getUnprocessedBlocks
-            liftIO $ putStrLn "Getting Transaction Senders"
-            transactionMap' <- fmap M.fromList $ getTransactionsForBlocks $ map fst5 blocks
-            putTransactionMap transactionMap'
-            liftIO $ putStrLn "Adding Blocks"
-            addBlocks blocks
+    let blocks = [b | ChainBlock b <- vmEvents]
 
-            when (length blocks < 100) $ liftIO $ waitForNewBlock conn
+    liftIO $ putStrLn "creating transactionMap"
+    let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
+    putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
+    liftIO $ putStrLn "done creating transactionMap"
+
+    forM_ blocks $ \b -> do
+      putBSum (blockHash b) (blockToBSum b)
+                       
+    addBlocks $ map (\b -> (blockHash b, b)) blocks
+
+    when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
+      pool <- getSQLDB
+      maybeBlock <- SQL.runSqlPool makeNewBlock pool
+      case maybeBlock of
+       Just block -> do
+         let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
+         putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
+         addBlocks [(blockHash block, block)]
+       Nothing -> return ()
 
   return ()
 
-fst5::(a, b, c, d, e)->a
-fst5 (x, _, _, _, _) = x
+getUnprocessedKafkaBlocks::IORef Integer->IO [VMEvent]
+getUnprocessedKafkaBlocks offsetIORef = do
+  ret <-
+      runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
+        stateRequiredAcks .= -1
+        stateWaitSize .= 1
+        stateWaitTime .= 100000
+        --offset <- getLastOffset LatestTime 0 "thetopic"
+        offset <- liftIO $ readIORef offsetIORef
+        liftIO $ putStrLn $ "Fetching recently mined blocks with offset " ++ (show offset)
+        vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
+        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length vmEvents)
+        return vmEvents
 
-getUnprocessedBlocks::ContextM [(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)]
-getUnprocessedBlocks = do
-  db <- getSQLDB
-  blocks <-
-    runResourceT $
-    flip SQL.runSqlPool db $ 
-    E.select $
-    E.from $ \(unprocessed `E.InnerJoin` block `E.InnerJoin` bd `E.InnerJoin` parentBD `E.InnerJoin` parent) -> do
-      E.on (parentBD E.^. BlockDataRefBlockId E.==. parent E.^. BlockId) 
-      E.on (bd E.^. BlockDataRefParentHash E.==. parentBD E.^. BlockDataRefHash) 
-      E.on (bd E.^. BlockDataRefBlockId E.==. block E.^. BlockId)
-      E.on (E.just (block E.^. BlockId) E.==. unprocessed E.?. UnprocessedBlockId)
-      E.orderBy [E.asc (bd E.^. BlockDataRefNumber)]
-      E.limit (fromIntegral flags_queryBlocks)
-      return (block E.^. BlockId, bd E.^. BlockDataRefId, bd E.^. BlockDataRefHash, block, parent)
-      
-  return $ map f blocks
-
-  where
-    f::(E.Value (E.Key Block), E.Value (E.Key BlockDataRef), E.Value SHA, E.Entity Block, E.Entity Block)->(E.Key Block, E.Key BlockDataRef, SHA, Block, Block)
-    f (bId, bdId, hash, b, p) = (E.unValue bId, E.unValue bdId, E.unValue hash, E.entityVal b, E.entityVal p)
-
-getTransactionsForBlocks::[E.Key Block]->ContextM [(SHA, Address)]
-getTransactionsForBlocks blockIDs = do
-  db <- getSQLDB
-  blocks <-
-    runResourceT $
-    flip SQL.runSqlPool db $ 
-    E.select $
-    E.from $ \(blockTX `E.InnerJoin` tx) -> do
-      E.on (blockTX E.^. BlockTransactionTransaction E.==. tx E.^. RawTransactionId)
-      E.where_ ((blockTX E.^. BlockTransactionBlockId) `E.in_` E.valList blockIDs)
-      return (tx E.^. RawTransactionTxHash, tx E.^. RawTransactionFromAddress)
-      
-  return $ map f blocks
-
-  where
-    f::(E.Value SHA, E.Value Address)->(SHA, Address)
-    f (h, a) = (E.unValue h, E.unValue a)
-
+  case ret of
+    Left e -> error $ show e
+    Right v -> return v
