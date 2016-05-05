@@ -42,7 +42,7 @@ data BlockSummary = BlockSummary {
   bSumParentHash::SHA,
   bSumDifficulty::Integer,
   bSumTotalDifficulty::Int,
-  bSumStateRoot::MP.SHAPtr,
+  bSumStateRoot::MP.StateRoot,
   bSumGasLimit::Integer,
   bSumTimestamp::UTCTime,
   bSumNumber::Integer

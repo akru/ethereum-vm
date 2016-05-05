@@ -3,8 +3,6 @@
 module Blockchain.VMOptions where
 import Blockchain.Mining
 
-import Blockchain.Mining
-
 import HFlags
 
 defineFlag "debug" False "turn debug info on or off"
