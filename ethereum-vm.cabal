@@ -47,13 +47,13 @@ library
                  , resourcet
                  , strato-adit
                  , strato-conf
+                 , text
                  , time
                  , transformers
                  , transformers-base
                  , vector
                  , ansi-wl-pprint
     exposed-modules: 
-                   Blockchain.BlockSummaryCacheDB
                    Blockchain.BlockChain
                    Blockchain.VMContext
                    Blockchain.VMOptions
@@ -84,7 +84,6 @@ executable ethereum-vm
                  , directory
                  , esqueleto
                  , blockapps-data
-                 , merkle-patricia-db
                  , blockapps-util
                  , ethereum-rlp
                  , ethereum-vm
@@ -93,12 +92,15 @@ executable ethereum-vm
                  , hflags
                  , lens
                  , leveldb-haskell
+                 , merkle-patricia-db
                  , milena
+                 , monad-logger
                  , mtl
                  , persistent-postgresql
                  , postgresql-simple
                  , resourcet
                  , strato-quarry
+                 , text
                  , time
                  , transformers
     main-is: Main.hs

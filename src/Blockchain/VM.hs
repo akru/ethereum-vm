@@ -25,16 +25,17 @@ import Data.Time.Clock.POSIX
 import Numeric
 import Text.Printf
 
-import Blockchain.BlockSummaryCacheDB
 import qualified Blockchain.Colors as CL
 import Blockchain.Format
 import Blockchain.VMContext
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
+import Blockchain.Data.BlockSummary
 import Blockchain.Data.Code
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.ModifyStateDB
@@ -165,7 +166,7 @@ accountCreationHack address' = do
 getBlockHashWithNumber::Integer->SHA->VMM (Maybe SHA)
 getBlockHashWithNumber num h = do
   liftIO $ putStrLn $ "getBlockHashWithNumber, calling getBSum with " ++ format h
-  bSum <- lift $ getBSum h
+  bSum <- getBSum h
   case num `compare` bSumNumber bSum of
    Ordering.LT -> getBlockHashWithNumber num $ bSumParentHash bSum
    Ordering.EQ -> return $ Just h

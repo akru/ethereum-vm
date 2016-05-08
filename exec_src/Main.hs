@@ -2,10 +2,12 @@
 
 import Control.Lens hiding (Context)
 import Control.Monad
+import Control.Monad.Logger
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
+import qualified Data.Text as T
 import qualified Database.Persist.Postgresql as SQL
 import HFlags
 
@@ -14,36 +16,33 @@ import Network.Kafka.Protocol
                     
 import System.IO
 
-import Blockchain.BlockSummaryCacheDB
 import Blockchain.BlockChain
 import Blockchain.Data.BlockDB
+import Blockchain.Data.BlockSummary
 import Blockchain.Data.Transaction
+import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.SQLDB
+import Blockchain.Output
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
 
 import Blockchain.Quarry
 
-main::IO ()
-main = do
-  hSetBuffering stdout NoBuffering
-  hSetBuffering stderr NoBuffering
-
-  _ <- $initHFlags "The Ethereum Haskell Peer"
-
+lMain::LoggingT IO ()
+lMain = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
 
   runContextM $ forever $ do
-    liftIO $ putStrLn "Getting Blocks"
-    vmEvents <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
+    logInfoN "Getting Blocks"
+    vmEvents <- getUnprocessedKafkaBlocks offsetIORef
 
     let blocks = [b | ChainBlock b <- vmEvents]
 
-    liftIO $ putStrLn "creating transactionMap"
+    logInfoN "creating transactionMap"
     let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
     putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-    liftIO $ putStrLn "done creating transactionMap"
+    logInfoN "done creating transactionMap"
 
     forM_ blocks $ \b -> do
       putBSum (blockHash b) (blockToBSum b)
@@ -62,16 +61,23 @@ main = do
 
   return ()
 
-getUnprocessedKafkaBlocks::IORef Integer->IO [VMEvent]
+main :: IO ()
+main = do
+  _ <- $initHFlags "Ethereum VM"
+  flip runLoggingT printLogMsg lMain
+
+
+getUnprocessedKafkaBlocks::(MonadIO m, MonadLogger m)=>
+                           IORef Integer->m [VMEvent]
 getUnprocessedKafkaBlocks offsetIORef = do
+  offset <- liftIO $ readIORef offsetIORef
+  logInfoN $ T.pack $ "Fetching recently mined blocks with offset " ++ (show offset)
   ret <-
-      runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
+      liftIO $ runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
         stateRequiredAcks .= -1
         stateWaitSize .= 1
         stateWaitTime .= 100000
         --offset <- getLastOffset LatestTime 0 "thetopic"
-        offset <- liftIO $ readIORef offsetIORef
-        liftIO $ putStrLn $ "Fetching recently mined blocks with offset " ++ (show offset)
         vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
         liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length vmEvents)
         return vmEvents
