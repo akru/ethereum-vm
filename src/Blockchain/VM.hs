@@ -11,6 +11,7 @@ import qualified Prelude as Ordering (Ordering(..))
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Logger
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.State
@@ -21,6 +22,7 @@ import Data.Char
 import Data.Function
 import Data.Maybe
 import qualified Data.Set as S
+import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import Numeric
 import Text.Printf
@@ -165,7 +167,7 @@ accountCreationHack address' = do
 
 getBlockHashWithNumber::Integer->SHA->VMM (Maybe SHA)
 getBlockHashWithNumber num h = do
-  liftIO $ putStrLn $ "getBlockHashWithNumber, calling getBSum with " ++ format h
+  lift $ logInfoN $ T.pack $ "getBlockHashWithNumber, calling getBSum with " ++ format h
   bSum <- getBSum h
   case num `compare` bSumNumber bSum of
    Ordering.LT -> getBlockHashWithNumber num $ bSumParentHash bSum
@@ -510,12 +512,12 @@ runOperation CALL = do
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
-        liftIO $ putStrLn $ CL.red "Call stack too deep."
+        lift $ logInfoN $ T.pack $ CL.red "Call stack too deep."
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
         return (0, Nothing)
       (_, True, _) -> do
-        liftIO $ putStrLn $ CL.red "Not enough ether to transfer the value."
+        lift $ logInfoN $ T.pack $ CL.red "Not enough ether to transfer the value."
         addGas $ fromIntegral $ gas + fromIntegral stipend
         return (0, Nothing)
       (_, _, Nothing) -> do
@@ -574,7 +576,7 @@ runOperation CALLCODE = do
       (_, True, _) -> do
         addGas $ fromIntegral gas
         addGas $ fromIntegral stipend
-        when flags_debug $ liftIO $ putStrLn $ CL.red "Insufficient balance"
+        when flags_debug $ lift $ logInfoN $ T.pack $ CL.red "Insufficient balance"
         return (0, Nothing)
       (_, _, Nothing) -> do
         nestedRun_debugWrapper False (fromIntegral gas+stipend) owner to owner value inputData 
@@ -658,7 +660,7 @@ runOperation DELEGATECALL = do
 
     else do
       let MalformedOpcode opcode = DELEGATECALL
-      when flags_debug $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
+      when flags_debug $ lift $ logInfoN $ T.pack $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
       left MalformedOpcodeException
 
 
@@ -682,7 +684,7 @@ runOperation SUICIDE = do
 
 
 runOperation (MalformedOpcode opcode) = do
-  when flags_debug $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
+  when flags_debug $ lift $ logInfoN $ T.pack $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
   left MalformedOpcodeException
 
 runOperation x = error $ "Missing case in runOperation: " ++ show x
@@ -811,19 +813,19 @@ printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState-
 printDebugInfo _ _ _15 _ op stateBefore stateAfter = do
 
   --CPP style trace
-{-  liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
-  liftIO $ putStrLn $ "EVM [ eth ] "-}
+{-  lift $ logInfoN $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+  lift $ logInfoN $ "EVM [ eth ] "-}
 
   --GO style trace
-  liftIO $ putStrLn $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
+  lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
 
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  liftIO $ putStrLn "    STACK"
-  liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
-  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
-  liftIO $ putStrLn $ "    STORAGE"
+  lift $ logInfoN "    STACK"
+  lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
+  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+  lift $ logInfoN $ "    STORAGE"
   kvs <- getAllStorageKeyVals
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+  lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
 
 runCode::Int->VMM ()
@@ -834,7 +836,7 @@ runCode c = do
   vmState <- lift get
 
   let (op, len) = getOperationAt code (pc vmState)
-  --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
+  --lift $ logInfoN $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
 
   (val, theRefund) <- opGasPriceAndRefund op
 
@@ -867,7 +869,7 @@ runCodeFromStart = do
   theData <- getEnvVar envInputData
 
   when flags_debug $
-     liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ showCode 0 code))
+     lift $ logInfoN $ T.pack $ "running code: " ++ tab (CL.magenta ("\n" ++ showCode 0 code))
 
 
   case code of
@@ -893,8 +895,8 @@ runVMM isRunningTests' isHomestead preExistingSuicideList callDepth' env availab
 
   case result of
       (Left e, vmState') -> do
-          liftIO $ putStrLn $ CL.red $ "Exception caught (" ++ show e ++ "), reverting state"
-          when flags_debug $ liftIO $ putStrLn "VM has finished running"
+          lift $ logInfoN $ T.pack $ CL.red $ "Exception caught (" ++ show e ++ "), reverting state"
+          when flags_debug $ logInfoN "VM has finished running"
           return (Left e, vmState'{logs=[]})
       (_, stateAfter) -> do
           setStateDBStateRoot $ MP.stateRoot $ contextStateDB $ dbs $ stateAfter
@@ -969,15 +971,15 @@ create' = do
   owner <- getEnvVar envOwner
   
   let codeBytes' = fromMaybe B.empty $ returnVal vmState
-  when flags_debug $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
+  when flags_debug $ lift $ logInfoN $ T.pack $ "Result: " ++ show codeBytes'
 
-  liftIO $ putStrLn $ "Trying to create contract\n" ++
+  lift $ logInfoN $ T.pack $ "Trying to create contract\n" ++
         "The amount of ether you need: " ++ show (gCREATEDATA * toInteger (B.length codeBytes')) ++ "\n" ++
         "The amount of ether you have: " ++ show (vmGasRemaining vmState)
   
   if (not $ vmIsHomestead vmState) && (vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes'))
     then do
-      liftIO $ putStrLn $ CL.red $ "Not enough ether to create contract, contract being thrown away (account was created though)\n" ++
+      lift $ logInfoN $ T.pack $ CL.red $ "Not enough ether to create contract, contract being thrown away (account was created though)\n" ++
         "The amount of ether you need: " ++ show (gCREATEDATA * toInteger (B.length codeBytes')) ++ "\n" ++
         "The amount of ether you have: " ++ show (vmGasRemaining vmState)
       lift $ put vmState{returnVal=Nothing}
@@ -1041,7 +1043,7 @@ call' noValueTransfer = do
     _ <- pay "call value transfer" sender receiveAddress (fromIntegral value')
     return ()
     
-  --whenM isDebugEnabled $ liftIO $ putStrLn $ "availableGas: " ++ show availableGas
+  --whenM isDebugEnabled $ lift $ logInfoN $ "availableGas: " ++ show availableGas
 
   runCodeFromStart
 
@@ -1097,7 +1099,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
       case result of
         Left e -> do
-          when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
+          when flags_debug $ lift $ logInfoN $ T.pack $ CL.red $ show e
           return Nothing
         Right _ -> do
 
@@ -1144,10 +1146,10 @@ nestedRun_debugWrapper noValueTransfer gas receiveAddress (Address address') sen
           state' <- lift get
           lift $ put state'{suicideList = suicideList finalVMState}
           when flags_debug $
-            liftIO $ putStrLn $ "Refunding: " ++ show (vmGasRemaining finalVMState)
+            lift $ logInfoN $ T.pack $ "Refunding: " ++ show (vmGasRemaining finalVMState)
           useGas (- vmGasRemaining finalVMState)
           addToRefund (refund finalVMState)
           return (1, Just retVal)
         Left e -> do
-          when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
+          when flags_debug $ lift $ logInfoN $ T.pack $ CL.red $ show e
           return (0, Nothing)
