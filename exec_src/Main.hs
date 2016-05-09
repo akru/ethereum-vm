@@ -11,6 +11,8 @@ import HFlags
 
 import Network.Kafka
 import Network.Kafka.Protocol
+import Data.Maybe
+import qualified Data.ByteString.Char8 as BC
                     
 import System.IO
 
@@ -22,8 +24,8 @@ import Blockchain.DB.SQLDB
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
-
 import Blockchain.Quarry
+import Blockchain.KafkaTopics
 
 main::IO ()
 main = do
@@ -48,6 +50,7 @@ main = do
     forM_ blocks $ \b -> do
       putBSum (blockHash b) (blockToBSum b)
                        
+    liftIO $ putStrLn "done putting summary blocks"
     addBlocks $ map (\b -> (blockHash b, b)) blocks
 
     when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
