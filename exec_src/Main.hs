@@ -14,8 +14,6 @@ import HFlags
 import Network.Kafka
 import Network.Kafka.Protocol
                     
-import System.IO
-
 import Blockchain.BlockChain
 import Blockchain.Data.BlockDB
 import Blockchain.Data.BlockSummary
@@ -49,7 +47,7 @@ lMain = do
                        
     addBlocks $ map (\b -> (blockHash b, b)) blocks
 
-    when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
+    when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
       maybeBlock <- SQL.runSqlPool makeNewBlock pool
       case maybeBlock of
