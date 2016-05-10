@@ -65,28 +65,22 @@ timeit message f = do
   liftIO $ putStrLn $ "#### " ++ message ++ " time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
   return ret
 
-addBlocks::[(SHA, Block)]->ContextM ()
-addBlocks [] = return ()
-addBlocks blocks = do
-  ret <-
-    forM (filter ((/= 0) . blockDataNumber . blockBlockData . snd) blocks) $ \(hash', block) ->
-      timeit "Block insertion" $ addBlock hash' block
+addBlocks::Bool->[Block]->ContextM ()
+addBlocks _ [] = return ()
+addBlocks isUnmined blocks = do
+  forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
+    timeit "Block insertion" $ addBlock isUnmined block
 
-  let fullBlocks = filter ((/= SHA 1) . fst) ret
-
-  case fullBlocks of
-   [] -> return ()
-   _ -> do
-     let (_, lastBlock) = last fullBlocks --last is OK, because we filter out blocks=[] in the case
-     replaceBestIfBetter lastBlock
+  when (not isUnmined) $ 
+    replaceBestIfBetter $ last blocks --last is OK, because we filter out blocks=[] in the case
 
 setTitle::String->IO()
 setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::SHA->Block->ContextM (SHA, Block)
-addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Bool->Block->ContextM ()
+addBlock isUnmined b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
   bSum <- getBSum $ blockDataParentHash bd
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
@@ -106,7 +100,7 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
   let transactions = blockReceiptTransactions b
 
-  addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
+  addTransactions isUnmined b (blockDataGasLimit $ blockBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
@@ -117,7 +111,7 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   db <- getStateDB
 
   b' <-
-    if blockDataStateRoot (blockBlockData b) == MP.StateRoot "" --TODO fix this, we are using this to communicate between strato-quarry and ethereum-vm, but anyone could submit a block with stateroot "" and cause trouble.
+    if isUnmined
     then do
       liftIO $ putStrLn "Note: block is partial, instead of doing a stateRoot check, I will fill in the stateroot"
       let newBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}
@@ -131,20 +125,18 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ blockBlockData b)
       return b
 
-  valid <- checkValidity (blockDataStateRoot (blockBlockData b) == MP.StateRoot "") (blockIsHomestead b) bSum b'
+  valid <- checkValidity isUnmined (blockIsHomestead b) bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err
 
   liftIO $ putStrLn $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
 
-  return (hash', b')
-
-addTransactions::Block->Integer->[Transaction]->ContextM ()
-addTransactions _ _ [] = return ()
-addTransactions b blockGas (t:rest) = do
+addTransactions::Bool->Block->Integer->[Transaction]->ContextM ()
+addTransactions _ _ _ [] = return ()
+addTransactions isUnmined b blockGas (t:rest) = do
   result <-
-    printTransactionMessage t b $
+    printTransactionMessage isUnmined t b $
       runEitherT $ addTransaction False b blockGas t
 
   (_, remainingBlockGas) <-
@@ -154,7 +146,7 @@ addTransactions b blockGas (t:rest) = do
           return (S.empty, blockGas)
       Right (resultState, g') -> return (suicideList resultState, g')
 
-  addTransactions b remainingBlockGas rest
+  addTransactions isUnmined b remainingBlockGas rest
 
 blockIsHomestead::Block->Bool
 blockIsHomestead b = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
@@ -287,8 +279,8 @@ intrinsicGas isHomestead t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromInteg
       txCost _ = if isHomestead then gCREATETX else gTX
 
 
-printTransactionMessage::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
-printTransactionMessage t b f = do
+printTransactionMessage::Bool->Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
+printTransactionMessage isUnmined t b f = do
   tAddr <- getTransactionAddress t
   --let tAddr = fromJust $ whoSignedThisTransaction t
 
@@ -317,7 +309,7 @@ printTransactionMessage t b f = do
  
   --stateRootAfter <- fmap MP.stateRoot getStateDB
       
-  unless (blockDataStateRoot (blockBlockData b) == MP.StateRoot "") $ --TODO fix this, we are using this to communicate between strato-quarry and ethereum-vm, but anyone could submit a block with stateroot "" and cause trouble.
+  unless isUnmined $
     when flags_createTransactionResults $ do
       let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
           beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]

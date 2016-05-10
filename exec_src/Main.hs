@@ -48,7 +48,7 @@ main = do
     forM_ blocks $ \b -> do
       putBSum (blockHash b) (blockToBSum b)
                        
-    addBlocks $ map (\b -> (blockHash b, b)) blocks
+    addBlocks False blocks
 
     when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
@@ -57,7 +57,7 @@ main = do
        Just block -> do
          let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
          putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-         addBlocks [(blockHash block, block)]
+         addBlocks True [block]
        Nothing -> return ()
 
   return ()
