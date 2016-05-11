@@ -120,7 +120,7 @@ runContextM f = do
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
       cdb <- DB.open (dbDir "h" ++ codeDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      blksumdb <- DB.open (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath)
+      blksumdb <- DB.open (dbDir "h" ++ blockSummaryCacheDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
 
       conn <- liftIO $ runNoLoggingT  $ SQL.createPostgresqlPool connStr' 20
