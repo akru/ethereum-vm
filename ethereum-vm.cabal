@@ -38,7 +38,9 @@ library
                  , haskoin
                  , hflags
                  , leveldb-haskell
+                 , lens
                  , merkle-patricia-db
+                 , milena
                  , mtl
                  , monad-control
                  , monad-logger
@@ -47,6 +49,7 @@ library
                  , resourcet
                  , strato-adit
                  , strato-conf
+                 , strato-quarry
                  , text
                  , time
                  , transformers
@@ -64,6 +67,7 @@ library
                    Blockchain.VM.Environment
                    Blockchain.VM.Opcodes
                    Blockchain.VM.VMState
+                   Executable.EthereumVM  
     other-modules:
                    Blockchain.DB.ModifyStateDB
                    Blockchain.VM.Memory
