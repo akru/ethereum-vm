@@ -26,6 +26,7 @@ import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
 import Blockchain.Quarry
 import Blockchain.KafkaTopics
+import Blockchain.EthConf
 
 main::IO ()
 main = do
@@ -68,7 +69,7 @@ main = do
 getUnprocessedKafkaBlocks::IORef Integer->IO [VMEvent]
 getUnprocessedKafkaBlocks offsetIORef = do
   ret <-
-      runKafka (mkKafkaState "ethereum-vm" ("127.0.0.1", 9092)) $ do
+      runKafkaConfigured "ethereum-vm" $ do
         stateRequiredAcks .= -1
         stateWaitSize .= 1
         stateWaitTime .= 100000
