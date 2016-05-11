@@ -75,6 +75,8 @@ addBlocks blocks = do
     forM (filter ((/= 0) . blockDataNumber . blockBlockData . snd) blocks) $ \(hash', block) ->
       timeit "Block insertion" $ addBlock hash' block
 
+  liftIO $ putStrLn "done inserting, now will replace best if best is among the list"
+
   let fullBlocks = filter ((/= SHA 1) . fst) ret
 
   case fullBlocks of
@@ -91,12 +93,18 @@ setTitle value = do
 addBlock::SHA->Block->ContextM (SHA, Block)
 addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
+--  liftIO $ putStrLn $ "in addBlock with parentHash: " ++ (format . blockDataParentHash $ bd)
+
   bSum <- getBSum $ blockDataParentHash bd
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   logInfoN $ T.pack $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
   setStateDBStateRoot $ bSumStateRoot bSum
+  liftIO $ putStrLn $ "Setting balances"
+
   s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
+
+  liftIO $ putStrLn $ "Processing uncles"
 
   forM_ uncles $ \uncle -> do
     s2 <- addToBalance (blockDataCoinbase bd) (rewardBase flags_testnet `quot` 32)
@@ -109,13 +117,19 @@ addBlock hash' b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
   let transactions = blockReceiptTransactions b
 
+  liftIO $ putStrLn "adding transactions"
+
   addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
 
+  liftIO $ putStrLn "flushing memory"
+
   flushMemStorageDB
   flushMemAddressStateDB
+
+  liftIO $ putStrLn "checking stateRoot"
 
   db <- getStateDB
 

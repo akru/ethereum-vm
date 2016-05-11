@@ -101,23 +101,24 @@ instance HasBlockSummaryDB ContextM where
 instance HasSQLDB ContextM where
   getSQLDB = fmap contextSQLDB get
 
+{-
 connStr'::SQL.ConnectionString
 connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=" ++ show (port $ sqlConfig ethConf)
+-}
 
 --runContextM::MonadIO m=>
 --             ContextM a->m ()
 runContextM::ContextM a->LoggingT IO ()
 runContextM f = do
-  homeDir <- liftIO getHomeDirectory
-  liftIO $ createDirectoryIfMissing False $ homeDir </> dbDir "h"
+  liftIO $ createDirectoryIfMissing False $ dbDir "h"
 
   _ <-
     runResourceT $ do
-      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
+      sdb <- DB.open (dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+      hdb <- DB.open (dbDir "h" ++ hashDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+      cdb <- DB.open (dbDir "h" ++ codeDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
       blksumdb <- DB.open (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
