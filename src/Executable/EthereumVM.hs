@@ -47,7 +47,7 @@ ethereumVM = do
       putBSum (blockHash b) (blockToBSum b)
                        
     liftIO $ putStrLn "done putting summary blocks"
-    addBlocks $ map (\b -> (blockHash b, b)) blocks
+    addBlocks False blocks
 
     when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
@@ -56,7 +56,7 @@ ethereumVM = do
        Just block -> do
          let tm' = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
          putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
-         addBlocks [(blockHash block, block)]
+         addBlocks True [block]
        Nothing -> return ()
 
   return ()
