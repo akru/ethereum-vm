@@ -97,26 +97,27 @@ instance HasCodeDB ContextM where
 instance HasSQLDB ContextM where
   getSQLDB = fmap contextSQLDB get
 
+{-
 connStr'::SQL.ConnectionString
 connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=" ++ show (port $ sqlConfig ethConf)
+-}
 
 runContextM::ContextM a->IO ()
 runContextM f = do
-  homeDir <- getHomeDirectory
-  createDirectoryIfMissing False $ homeDir </> dbDir "h"
+  createDirectoryIfMissing False $ dbDir "h"
 
   _ <-
     runResourceT $ do
-      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
+      sdb <- DB.open (dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+      hdb <- DB.open (dbDir "h" ++ hashDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+      cdb <- DB.open (dbDir "h" ++ codeDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
 
       conn <- runNoLoggingT  $ SQL.createPostgresqlPool connStr' 20
 
-      withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
+      withBlockSummaryCacheDB (dbDir "h" ++ blockSummaryCacheDBPath) $ 
         runStateT f (Context
                      MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "stateroot not set"}
                      hdb

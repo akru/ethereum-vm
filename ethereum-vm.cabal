@@ -101,6 +101,7 @@ executable ethereum-vm
                  , strato-quarry
                  , time
                  , transformers
+                 , strato-conf
     main-is: Main.hs
     ghc-options: -Wall -O2
     buildable: True
