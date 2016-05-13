@@ -6,6 +6,7 @@ module Blockchain.Verifier (
   ) where
 
 import Control.Monad
+import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
 
 import Blockchain.BlockSummaryCacheDB
@@ -26,7 +27,10 @@ import Blockchain.Util
 import Blockchain.VMContext
 import Blockchain.VMOptions
 
+import Blockchain.Database.MerklePatriciaMem
+import Blockchain.Database.KeyVal
 
+import Data.NibbleString
 --import Debug.Trace
 
 {-
@@ -75,11 +79,33 @@ addAllKVs mpdb (x:rest) = do
   mpdb' <- MP.unsafePutKeyVal mpdb (byteString2NibbleString $ rlpSerialize $ rlpEncode $ fst x) (rlpEncode $ rlpSerialize $ rlpEncode $ snd x)
   addAllKVs mpdb' rest
 
-verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
+blank :: MPMem
+blank = initializeBlankMem
+
+runKeyValMPMap :: (Monad m) => KeyValMPMap m a -> m (a,MPMem)
+runKeyValMPMap action = runStateT action blank
+
+fixit :: RLPSerializable obj => [(Integer, obj)] -> [(NibbleString,RLPObject)]
+fixit = map (\(x,y) -> ( byteString2NibbleString . rlpSerialize . rlpEncode $ x,
+                         rlpEncode . rlpSerialize . rlpEncode $ y ))
+
+verifyTransactionRoot' :: (Monad m)=>Block->m (Bool, MP.StateRoot)
+verifyTransactionRoot' b = do
+    let zippedTXList = zip [0..] (blockReceiptTransactions b) :: [(Integer,Transaction)]
+        fixedTXList = fixit zippedTXList
+
+    vals <- runKeyValMPMap $
+               mapM putKV $ fixedTXList
+
+    let sr = mpStateRoot . last . fst $ vals 
+
+    return (blockDataTransactionsRoot (blockBlockData b) == sr, sr)
+
+verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m (Bool,MP.StateRoot)
 verifyTransactionRoot b = do
   mpdb <- getStateDB
   MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ blockReceiptTransactions b
-  return (blockDataTransactionsRoot (blockBlockData b) == sr)
+  return (blockDataTransactionsRoot (blockBlockData b) == sr, sr)
 
 verifyOmmersRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
 verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray $ map rlpEncode $ blockBlockUncles b)
@@ -88,7 +114,13 @@ checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
   when (flags_transactionRootVerification) $ do
            trVerified <- verifyTransactionRoot b
-           when (not trVerified) $ error "transactionRoot doesn't match transactions"
+           trVerifiedMem <- verifyTransactionRoot' b
+
+              
+ 
+           when (not (fst trVerified)) $ error "transactionRoot doesn't match transactions"
+           when (not (fst trVerifiedMem)) $ error "memTransactionRoot doesn't match transactions"
+
   ommersVerified <- verifyOmmersRoot b
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum

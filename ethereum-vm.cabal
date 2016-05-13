@@ -52,6 +52,7 @@ library
                  , transformers-base
                  , vector
                  , ansi-wl-pprint
+                 , nibblestring
     exposed-modules: 
                    Blockchain.BlockSummaryCacheDB
                    Blockchain.BlockChain
