@@ -38,7 +38,9 @@ library
                  , haskoin
                  , hflags
                  , leveldb-haskell
+                 , lens
                  , merkle-patricia-db
+                 , milena
                  , mtl
                  , monad-control
                  , monad-logger
@@ -47,6 +49,8 @@ library
                  , resourcet
                  , strato-adit
                  , strato-conf
+                 , strato-quarry
+                 , text
                  , time
                  , transformers
                  , transformers-base
@@ -54,7 +58,6 @@ library
                  , ansi-wl-pprint
                  , nibblestring
     exposed-modules: 
-                   Blockchain.BlockSummaryCacheDB
                    Blockchain.BlockChain
                    Blockchain.VMContext
                    Blockchain.VMOptions
@@ -65,6 +68,7 @@ library
                    Blockchain.VM.Environment
                    Blockchain.VM.Opcodes
                    Blockchain.VM.VMState
+                   Executable.EthereumVM  
     other-modules:
                    Blockchain.DB.ModifyStateDB
                    Blockchain.VM.Memory
@@ -85,7 +89,6 @@ executable ethereum-vm
                  , directory
                  , esqueleto
                  , blockapps-data
-                 , merkle-patricia-db
                  , blockapps-util
                  , ethereum-rlp
                  , ethereum-vm
@@ -94,14 +97,18 @@ executable ethereum-vm
                  , hflags
                  , lens
                  , leveldb-haskell
+                 , merkle-patricia-db
                  , milena
+                 , monad-logger
                  , mtl
                  , persistent-postgresql
                  , postgresql-simple
                  , resourcet
                  , strato-quarry
+                 , text
                  , time
                  , transformers
+                 , strato-conf
     main-is: Main.hs
     ghc-options: -Wall -O2
     buildable: True

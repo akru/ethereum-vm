@@ -4,6 +4,7 @@
 module Blockchain.VM.VMM where
 
 import Control.Monad
+import Control.Monad.Logger
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Resource
@@ -11,10 +12,10 @@ import Control.Monad.Trans.State
 import qualified Data.ByteString as B
 import qualified Data.Set as S
 
-import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.MemAddressStateDB
@@ -28,7 +29,7 @@ import Blockchain.VM.Environment
 import Blockchain.VM.VMState
 import Blockchain.VMContext
 
-type VMM = EitherT VMException (StateT VMState (BlockSummaryCacheT (ResourceT IO)))
+type VMM = EitherT VMException (StateT VMState (ResourceT (LoggingT IO)))
 --type VMM2 = EitherT VMException (StateT VMState (ResourceT IO))
 
 --TODO- Do I really need this?  Is it bad that it is undefined?
@@ -64,6 +65,9 @@ instance HasStorageDB VMM where
         
 instance HasCodeDB VMM where
     getCodeDB = lift $ fmap (contextCodeDB . dbs) get
+
+instance HasBlockSummaryDB VMM where
+    getBlockSummaryDB = lift $ fmap (contextBlockSummaryDB . dbs) get
 
 instance HasSQLDB VMM where
     getSQLDB = lift $ fmap (contextSQLDB . dbs) get

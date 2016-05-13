@@ -9,9 +9,9 @@ import Control.Monad
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
 
-import Blockchain.BlockSummaryCacheDB
 import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
+import Blockchain.Data.BlockSummary
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction

@@ -17,7 +17,7 @@ module Blockchain.VMContext (
 
 
 import Control.Monad.IO.Class
-import Control.Monad.Logger    (runNoLoggingT)
+import Control.Monad.Logger
 import Control.Monad.Trans.Resource
 import Control.Monad.State
 import qualified Data.ByteString.Char8 as BC
@@ -29,12 +29,12 @@ import System.FilePath
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 
-import Blockchain.BlockSummaryCacheDB
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.MemAddressStateDB
@@ -53,6 +53,7 @@ data Context =
     contextStateDB::MP.MPDB,
     contextHashDB::HashDB,
     contextCodeDB::CodeDB,
+    contextBlockSummaryDB::BlockSummaryDB,
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
     contextWhoSignedThisTransaction::Transaction->Address,
@@ -60,7 +61,7 @@ data Context =
     contextStorageMap::M.Map (Address, Word256) Word256
     }
 
-type ContextM = StateT Context (BlockSummaryCacheT (ResourceT IO))
+type ContextM = StateT Context (ResourceT (LoggingT IO))
 
 instance HasStateDB ContextM where
   getStateDB = do
@@ -94,38 +95,46 @@ instance HasHashDB ContextM where
 instance HasCodeDB ContextM where
   getCodeDB = fmap contextCodeDB get
 
+instance HasBlockSummaryDB ContextM where
+  getBlockSummaryDB = fmap contextBlockSummaryDB get
+
 instance HasSQLDB ContextM where
   getSQLDB = fmap contextSQLDB get
 
+{-
 connStr'::SQL.ConnectionString
 connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=" ++ show (port $ sqlConfig ethConf)
+-}
 
-runContextM::ContextM a->IO ()
+--runContextM::MonadIO m=>
+--             ContextM a->m ()
+runContextM::ContextM a->LoggingT IO ()
 runContextM f = do
-  homeDir <- getHomeDirectory
-  createDirectoryIfMissing False $ homeDir </> dbDir "h"
+  liftIO $ createDirectoryIfMissing False $ dbDir "h"
 
   _ <-
     runResourceT $ do
-      sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
+      sdb <- DB.open (dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+      hdb <- DB.open (dbDir "h" ++ hashDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-      cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+      cdb <- DB.open (dbDir "h" ++ codeDBPath)
+             DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+      blksumdb <- DB.open (dbDir "h" ++ blockSummaryCacheDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
 
-      conn <- runNoLoggingT  $ SQL.createPostgresqlPool connStr' 20
+      conn <- liftIO $ runNoLoggingT  $ SQL.createPostgresqlPool connStr' 20
 
-      withBlockSummaryCacheDB (homeDir </> dbDir "h" ++ blockSummaryCacheDBPath) $ 
-        runStateT f (Context
-                     MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "stateroot not set"}
-                     hdb
-                     cdb
-                     conn
-                     Nothing
-                     (error "contextWhoSignedThisTransaction not set")
-                     M.empty
-                     M.empty)
+      runStateT f (Context
+                   MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "stateroot not set"}
+                   hdb
+                   cdb
+                   blksumdb
+                   conn
+                   Nothing
+                   (error "contextWhoSignedThisTransaction not set")
+                   M.empty
+                   M.empty)
 
   return ()
 
