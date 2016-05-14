@@ -46,7 +46,6 @@ ethereumVM = do
     forM_ blocks $ \b -> do
       putBSum (blockHash b) (blockToBSum b)
                        
-    liftIO $ putStrLn "done putting summary blocks"
     addBlocks False blocks
 
     when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
