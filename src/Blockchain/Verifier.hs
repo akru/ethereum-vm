@@ -6,11 +6,13 @@ module Blockchain.Verifier (
   ) where
 
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
 
-import Blockchain.BlockSummaryCacheDB
 import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
+import Blockchain.Data.BlockSummary
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
@@ -25,7 +27,7 @@ import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VMContext
 import Blockchain.VMOptions
-
+import Blockchain.Verification
 
 --import Debug.Trace
 
@@ -75,11 +77,17 @@ addAllKVs mpdb (x:rest) = do
   mpdb' <- MP.unsafePutKeyVal mpdb (byteString2NibbleString $ rlpSerialize $ rlpEncode $ fst x) (rlpEncode $ rlpSerialize $ rlpEncode $ snd x)
   addAllKVs mpdb' rest
 
-verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
+verifyTransactionRoot'::Block -> (Bool,MP.StateRoot)
+verifyTransactionRoot' b = ( blockDataTransactionsRoot bd == tVal , tVal) where
+  bd = blockBlockData b 
+  tVal = transactionsVerificationValue $ blockReceiptTransactions b
+
+verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m (Bool,MP.StateRoot)
 verifyTransactionRoot b = do
   mpdb <- getStateDB
+
   MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ blockReceiptTransactions b
-  return (blockDataTransactionsRoot (blockBlockData b) == sr)
+  return (blockDataTransactionsRoot (blockBlockData b) == sr, sr)
 
 verifyOmmersRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
 verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray $ map rlpEncode $ blockBlockUncles b)
@@ -88,7 +96,12 @@ checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
   when (flags_transactionRootVerification) $ do
            trVerified <- verifyTransactionRoot b
-           when (not trVerified) $ error "transactionRoot doesn't match transactions"
+           let trVerifiedMem = verifyTransactionRoot' b
+
+           when (not (fst trVerifiedMem)) $ error "memTransactionRoot doesn't match transactions" 
+           when (not (fst trVerified)) $ error "transactionRoot doesn't match transactions"
+
+
   ommersVerified <- verifyOmmersRoot b
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum

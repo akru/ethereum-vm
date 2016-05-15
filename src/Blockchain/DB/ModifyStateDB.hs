@@ -21,12 +21,10 @@ import Blockchain.VMOptions
 addToBalance::(HasMemAddressStateDB m, HasHashDB m, HasStateDB m)=>
               Address->Integer->m Bool
 addToBalance address val = do
-  liftIO $ putStrLn $ "getting address: " ++ (show address)
   addressState <- getAddressState address
 
   let newVal = addressStateBalance addressState + val
 
-  liftIO $ putStrLn $ "setting new balance: " ++ (show newVal)
   if newVal < 0
     then return False
     else do

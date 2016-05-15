@@ -1,85 +1,14 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 
-import Control.Lens hiding (Context)
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.IORef
-import Data.Maybe
-import qualified Data.Map as M
-import qualified Database.Persist.Postgresql as SQL
+import Control.Monad.Logger
 import HFlags
 
-import Network.Kafka
-import Network.Kafka.Protocol
-import Data.Maybe
-import qualified Data.ByteString.Char8 as BC
-                    
-import System.IO
-
-import Blockchain.BlockSummaryCacheDB
-import Blockchain.BlockChain
-import Blockchain.Data.BlockDB
-import Blockchain.Data.Transaction
-import Blockchain.DB.SQLDB
+import Blockchain.Output
+import Blockchain.Quarry.Flags
 import Blockchain.VMOptions
-import Blockchain.VMContext
-import Blockchain.Stream.VMEvent
-import Blockchain.Quarry
-import Blockchain.KafkaTopics
-import Blockchain.EthConf
+import Executable.EthereumVM
 
-main::IO ()
+main :: IO ()
 main = do
-  hSetBuffering stdout NoBuffering
-  hSetBuffering stderr NoBuffering
-
-  _ <- $initHFlags "The Ethereum Haskell Peer"
-
-  offsetIORef <- liftIO $ newIORef flags_startingBlock
-
-  runContextM $ forever $ do
-    liftIO $ putStrLn "Getting Blocks"
-    vmEvents <- liftIO $ getUnprocessedKafkaBlocks offsetIORef
-
-    let blocks = [b | ChainBlock b <- vmEvents]
-
-    liftIO $ putStrLn "creating transactionMap"
-    let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
-    putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-    liftIO $ putStrLn "done creating transactionMap"
-
-    forM_ blocks $ \b -> do
-      putBSum (blockHash b) (blockToBSum b)
-                       
-    liftIO $ putStrLn "done putting summary blocks"
-    addBlocks $ map (\b -> (blockHash b, b)) blocks
-
-    when (not $ null [1 | NewUnminedBlockAvailable <- vmEvents]) $ do
-      pool <- getSQLDB
-      maybeBlock <- SQL.runSqlPool makeNewBlock pool
-      case maybeBlock of
-       Just block -> do
-         let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
-         putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-         addBlocks [(blockHash block, block)]
-       Nothing -> return ()
-
-  return ()
-
-getUnprocessedKafkaBlocks::IORef Integer->IO [VMEvent]
-getUnprocessedKafkaBlocks offsetIORef = do
-  ret <-
-      runKafkaConfigured "ethereum-vm" $ do
-        stateRequiredAcks .= -1
-        stateWaitSize .= 1
-        stateWaitTime .= 100000
-        --offset <- getLastOffset LatestTime 0 "thetopic"
-        offset <- liftIO $ readIORef offsetIORef
-        liftIO $ putStrLn $ "Fetching recently mined blocks with offset " ++ (show offset)
-        vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
-        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length vmEvents)
-        return vmEvents
-
-  case ret of
-    Left e -> error $ show e
-    Right v -> return v
+  _ <- $initHFlags "Ethereum VM"
+  flip runLoggingT printLogMsg ethereumVM
