@@ -6,8 +6,6 @@ module Blockchain.Verifier (
   ) where
 
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.State
 import Control.Monad.Trans.Resource
 
 import Blockchain.Constants
