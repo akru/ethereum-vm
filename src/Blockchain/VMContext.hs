@@ -20,12 +20,10 @@ import Control.Monad.IO.Class
 import Control.Monad.Logger
 import Control.Monad.Trans.Resource
 import Control.Monad.State
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.Map as M
 import qualified Database.LevelDB as DB
 import qualified Database.Persist.Postgresql as SQL
 import System.Directory
-import System.FilePath
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 

@@ -48,7 +48,6 @@ import Blockchain.DB.StateDB
 import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.Format
-import Blockchain.SHA
 import Blockchain.Stream.UnminedBlock
 import Blockchain.VMContext
 import Blockchain.VMOptions
@@ -71,7 +70,7 @@ timeit message f = do
 addBlocks::Bool->[Block]->ContextM ()
 addBlocks _ [] = return ()
 addBlocks isUnmined blocks = do
-  forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
+  _ <- forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
     timeit "Block insertion" $ addBlock isUnmined block
 
   liftIO $ putStrLn "done inserting, now will replace best if best is among the list"
