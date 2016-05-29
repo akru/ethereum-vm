@@ -8,6 +8,7 @@ module Blockchain.Verifier (
 import Control.Monad
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Class
+import Control.Monad.IO.Class
 
 import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
@@ -29,7 +30,9 @@ import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verification
 
---import Debug.Trace
+import Debug.Trace
+
+debug = flip trace
 
 {-
 nextGasLimit::Integer->Integer->Integer
@@ -104,12 +107,12 @@ checkValidity partialBlock isHomestead parentBSum b = do
            when (not (fst trVerifiedMem)) $ error "memTransactionRoot doesn't match transactions" 
            when (not (fst trVerified)) $ error "transactionRoot doesn't match transactions"
 
-
   ommersVerified <- verifyOmmersRoot b
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
-    miningVerified <- lift $ lift $ lift $ (verify verifier) b
+    liftIO $ putStrLn $ "About to verify block"
+    miningVerified <- liftIO $ (verify verifier) b
     unless miningVerified $ fail "block falsely mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
