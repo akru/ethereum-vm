@@ -7,6 +7,7 @@ module Blockchain.Verifier (
 
 import Control.Monad
 import Control.Monad.Trans.Resource
+import Control.Monad.Trans.Class
 
 import Blockchain.Constants
 import Blockchain.Data.AddressStateDB
@@ -21,6 +22,7 @@ import Blockchain.Mining
 import Blockchain.Mining.Normal
 import Blockchain.Mining.Instant
 import Blockchain.Mining.SHA
+import Blockchain.Mining.Ethash
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VMContext
@@ -66,8 +68,11 @@ checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
              $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "', should be larger than " ++ show (minGasLimit flags_testnet::Integer)
     return ()
 
-verifier::Miner
-verifier = (if (flags_miner == Normal) then normalMiner else if(flags_miner == Instant) then instantMiner else shaMiner)
+verifier :: Miner
+verifier = (if (flags_miner == Normal) then normalMiner 
+             else if(flags_miner == Instant) then instantMiner 
+             else if(flags_miner == Ethash) then ethashMiner
+             else shaMiner)
 
 addAllKVs::RLPSerializable obj=>MonadResource m=>MP.MPDB->[(Integer, obj)]->m MP.MPDB
 addAllKVs x [] = return x
@@ -104,7 +109,7 @@ checkValidity partialBlock isHomestead parentBSum b = do
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
-    let miningVerified = (verify verifier) b
+    miningVerified <- lift $ lift $ lift $ (verify verifier) b
     unless miningVerified $ fail "block falsely mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
