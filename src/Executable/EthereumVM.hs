@@ -29,8 +29,12 @@ import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
 import Blockchain.Quarry
 
+import Control.Concurrent
+import API.EthereumVM
+
 ethereumVM::LoggingT IO ()
 ethereumVM = do
+  _ <- liftIO . forkIO $ evmAPIMain 
   offsetIORef <- liftIO $ newIORef flags_startingBlock
 
   runContextM $ forever $ do

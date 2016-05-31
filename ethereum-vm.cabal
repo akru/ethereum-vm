@@ -57,6 +57,9 @@ library
                  , vector
                  , ansi-wl-pprint
                  , nibblestring
+                 , servant-server
+                 , wai
+                 , warp
     exposed-modules: 
                    Blockchain.BlockChain
                    Blockchain.VMContext
@@ -69,6 +72,10 @@ library
                    Blockchain.VM.Opcodes
                    Blockchain.VM.VMState
                    Executable.EthereumVM  
+                   API.EthereumVM
+                   API.Handler.Status
+                   API.Model.Status
+                   API.Route.Status
     other-modules:
                    Blockchain.DB.ModifyStateDB
                    Blockchain.VM.Memory
