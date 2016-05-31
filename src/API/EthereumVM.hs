@@ -1,11 +1,15 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 
 module API.EthereumVM (
-   evmAPIMain
+   evmAPIMain,
+   EthereumVMStatus(..),
+   statusAPI,
+   StatusAPI
   ) where
 
 import API.Route.Status
 import API.Handler.Status
+import API.Model.Status
 
 import Servant
 import Network.Wai
