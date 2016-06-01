@@ -70,6 +70,11 @@ timeit message f = do
 addBlocks::Bool->[Block]->ContextM ()
 addBlocks _ [] = return ()
 addBlocks isUnmined blocks = do
+  logInfoN . T.pack $ "Inserting " ++ (show . length $ blocks ) 
+                                   ++ " block starting with " 
+                                   ++ (show . blockDataNumber . blockBlockData . head $ blocks) 
+
+
   _ <- forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
     timeit "Block insertion" $ addBlock isUnmined block
 
