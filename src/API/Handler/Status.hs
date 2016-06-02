@@ -9,5 +9,5 @@ import API.Model.Status
 import API.Route.Status
 
 statusGet :: Server StatusAPI
-statusGet = return $ EthereumVMStatus "All good!" "now"
+statusGet = return $ EthereumVMStatus (Right (VMBaseStatus "All good!" "now"))
 

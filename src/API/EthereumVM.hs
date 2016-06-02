@@ -23,3 +23,4 @@ statusAPI = Proxy
 
 evmAPIMain :: IO ()
 evmAPIMain = run 8081 app
+
