@@ -12,7 +12,7 @@ import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Text as T
--- import qualified Database.Persist.Postgresql as SQL
+import qualified Database.Persist.Postgresql as SQL
 
 import Network.Kafka
 import Network.Kafka.Protocol
@@ -22,12 +22,12 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.BlockSummary
 import Blockchain.Data.Transaction
 import Blockchain.DB.BlockSummaryDB
--- import Blockchain.DB.SQLDB
+import Blockchain.DB.SQLDB
 import Blockchain.EthConf
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Stream.VMEvent
--- import Blockchain.Quarry
+import Blockchain.Quarry
 
 ethereumVM::LoggingT IO ()
 ethereumVM = do
@@ -49,7 +49,7 @@ ethereumVM = do
             
     addBlocks False blocks
 
-{-
+
     when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
       pool <- getSQLDB
       maybeBlock <- SQL.runSqlPool makeNewBlock pool
@@ -63,7 +63,7 @@ ethereumVM = do
        Nothing -> do
          logInfoN $ "returning without inserting any unmined blocks"
          return ()
-  -}  
+
   return ()
 
 getUnprocessedKafkaBlocks::(MonadIO m, MonadLogger m)=>
