@@ -391,7 +391,7 @@ replaceBestIfBetter b = do
 
   logInfoN $ T.pack $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show (blockDataNumber oldBestBlock)
 
-  when (newNumber > blockDataNumber oldBestBlock) $ do
+  when (newNumber > blockDataNumber oldBestBlock || newNumber == 0) $ do
 
     when flags_sqlDiff $ do
       sqlDiff newNumber (blockDataStateRoot oldBestBlock) newStateRoot
