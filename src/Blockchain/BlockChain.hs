@@ -59,21 +59,26 @@ import Blockchain.VM.VMState
 
 --import Debug.Trace
 
-timeit::MonadIO m=>String->m a->m a
+timeit::(MonadIO m, MonadLogger m)=>String->m a->m a
 timeit message f = do
   before <- liftIO $ getPOSIXTime 
   ret <- f
   after <- liftIO $ getPOSIXTime 
-  liftIO $ putStrLn $ "#### " ++ message ++ " time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+  logInfoN $ T.pack $ "#### " ++ message ++ " time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
   return ret
 
 addBlocks::Bool->[Block]->ContextM ()
 addBlocks _ [] = return ()
 addBlocks isUnmined blocks = do
+  logInfoN . T.pack $ "Inserting " ++ (show . length $ blocks ) 
+                                   ++ " block starting with " 
+                                   ++ (show . blockDataNumber . blockBlockData . head $ blocks) 
+
+
   _ <- forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
     timeit "Block insertion" $ addBlock isUnmined block
 
-  liftIO $ putStrLn "done inserting, now will replace best if best is among the list"
+  logInfoN "done inserting, now will replace best if best is among the list"
 
   when (not isUnmined) $ 
     replaceBestIfBetter $ last blocks --last is OK, because we filter out blocks=[] in the case
