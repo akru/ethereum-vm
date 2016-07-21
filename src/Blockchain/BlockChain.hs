@@ -54,6 +54,7 @@ import Blockchain.VMOptions
 import Blockchain.Verifier
 import Blockchain.VM
 import Blockchain.VM.Code
+import Blockchain.VM.Environment
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
@@ -328,17 +329,24 @@ printTransactionMessage isUnmined t b f = do
           beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
           afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
           afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
-          modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
-
-      newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
+          modified = (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
 
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
-      let (resultString, response, theTrace', theLogs) =
+      let (resultString, response, theTrace', theLogs, thisAddressM) =
             case result of 
-              Left err -> (err, "", [], []) --TODO keep the trace when the run fails
-              Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+              Left err -> (err, "", [], [], Nothing) --TODO keep the trace when the run fails
+              Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state', Just $ envOwner $ environment state')
+
+      let defaultNewAddrs = S.toList modified
+          moveToFront thisAddress = 
+            if thisAddress `S.member` modified
+            then thisAddress : S.toList (modified S.\\ S.singleton thisAddress)
+            else defaultNewAddrs
+
+      newAddresses <- filterM (fmap not . NoCache.addressStateExists) $ 
+        maybe defaultNewAddrs moveToFront thisAddressM
 
       forM_ theLogs $ \log' -> do
         putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
