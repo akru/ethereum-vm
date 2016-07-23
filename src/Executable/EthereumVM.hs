@@ -33,37 +33,45 @@ ethereumVM::LoggingT IO ()
 ethereumVM = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
 
-  runContextM $ forever $ do
-    logInfoN "Getting Blocks"
-    vmEvents <- getUnprocessedKafkaBlocks offsetIORef
+  runContextM $ do
+    addFirstBlockToBSum
+    forever $ do
+      logInfoN "Getting Blocks"
+      vmEvents <- getUnprocessedKafkaBlocks offsetIORef
 
-    let blocks = [b | ChainBlock b <- vmEvents]
+      let blocks = [b | ChainBlock b <- vmEvents]
 
-    logInfoN "creating transactionMap"
-    let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
-    putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
-    logInfoN "done creating transactionMap"
+      logInfoN "creating transactionMap"
+      let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
+      putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
+      logInfoN "done creating transactionMap"
 
-    forM_ blocks $ \b -> do
-      putBSum (blockHash b) (blockToBSum b)
+      forM_ blocks $ \b -> do
+        putBSum (blockHash b) (blockToBSum b)
             
-    addBlocks False blocks
+      addBlocks False blocks
 
 
-    when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
-      pool <- getSQLDB
-      maybeBlock <- SQL.runSqlPool makeNewBlock pool
+      when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
+        pool <- getSQLDB
+        maybeBlock <- SQL.runSqlPool makeNewBlock pool
 
-      case maybeBlock of
-       Just block -> do
-         let tm' = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
-         putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
-         logInfoN $ "inserting a block from the unmined block list"
-         addBlocks True [block]
-       Nothing -> do
-         logInfoN $ "returning without inserting any unmined blocks"
-         return ()
+        case maybeBlock of
+         Just block -> do
+           let tm' = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
+           putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
+           logInfoN $ "inserting a block from the unmined block list"
+           addBlocks True [block]
+         Nothing -> do
+           logInfoN $ "returning without inserting any unmined blocks"
+           return ()
 
+  return ()
+
+addFirstBlockToBSum::HasBlockSummaryDB m=>m ()
+addFirstBlockToBSum = do
+  Just (ChainBlock first:_) <- liftIO $ fetchVMEventsIO 0
+  putBSum (blockHash first) (blockToBSum first)
   return ()
 
 getUnprocessedKafkaBlocks::(MonadIO m, MonadLogger m)=>

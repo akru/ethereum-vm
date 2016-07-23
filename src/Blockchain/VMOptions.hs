@@ -13,5 +13,5 @@ defineFlag "sqlDiff" True "runs sqlDiff and updates account state and storage in
 defineFlag "queryBlocks" (10000::Int) "Number of blocks to query from SQL to process in one batch"
 defineFlag "miningVerification" True "Flag to turn mining verification or/off"
 defineFlag "transactionRootVerification" True "Flag to turn transaction root verification or/off"
-defineFlag "startingBlock" (0::Integer) "block in kafka to start running the VM on"
+defineFlag "startingBlock" (1::Integer) "block in kafka to start running the VM on"
 defineEQFlag "miner" [| Instant :: MinerType |] "MINER" "What mining algorithm"
