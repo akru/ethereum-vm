@@ -874,20 +874,28 @@ data VMStateDiff = VMStateDiff {
 
 makeStateDiffJSON::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (Value)
 makeStateDiffJSON e a b c op stateBefore stateAfter = do
+  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  let memory' = showMem 0 (B.unpack $ memByteString)
+
+  let stack' = unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
+
+  kvs <- getAllStorageKeyVals
+  let storage' = unlines (map (\(k, v) -> "" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+  
   let o = object ["depth" .= (callDepth stateBefore),
                   "error" .= False,
                   "gas" .= show (vmGasRemaining stateAfter),
                   "gasCost" .= show (vmGasRemaining stateBefore - vmGasRemaining stateAfter),
-                  "memory" .= False,
+                  "memory" .= memory',
                   "op" .= formatOp op,
                   "pc" .= show (toInteger $ pc stateBefore),
-                  "stack" .= True,
-                  "storage" .= True
+                  "stack" .= stack',
+                  "storage" .= storage'
                   ]
   return o
 
 
-jsonDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
+jsonDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState-> VMM ()
 jsonDebugInfo e a b c op stateBefore stateAfter = do
   j <- makeStateDiffJSON e a b c op stateBefore stateAfter
   lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ j
