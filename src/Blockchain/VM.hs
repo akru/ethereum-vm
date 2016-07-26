@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass #-}
 
 module Blockchain.VM (
   runCodeFromStart,
@@ -26,6 +26,9 @@ import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import Numeric
 import Text.Printf
+import GHC.Generics
+import Data.Aeson
+import Data.Aeson.Types
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Format
@@ -807,25 +810,97 @@ formatOp::Operation->String
 formatOp (PUSH x) = "PUSH" ++ show (length x) -- ++ show x
 formatOp x = show x
 
+instance ToJSON Operation where
+  toJSON op = object ["op" .= formatOp op]
+
+--{
+--  "depth":  1,
+--  "error":  "",
+--  "gas":  1615069,
+--  "gasCost":  33,
+--  "memory":  ["0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000060", "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000000000000000000"],
+--  "op":  "CODECOPY",
+--  "pc":  91,
+--  "stack":  ["000000000000000000000000304a554a310c7e546dfe434669c62820b7d83490", "0000000000000000000000000000000000000000000000000000000000000060", "0000000000000000000000000000000000000000000000000000000000000082", "0000000000000000000000000000000000000000000000000000000000000082", "0000000000000000000000000000000000000000000000000000000000000092", "0000000000000000000000000000000000000000000000000000000000000060"],
+--  "storage":  {
+--    "0000000000000000000000000000000000000000000000000000000000000000":  "000000000000000000000000be3ae5cb97c253dda67181c6e34e43f5c275e08b",
+--    "0000000000000000000000000000000000000000000000000000000000000001":  "000000000000000000000000be3ae5cb97c253dda67181c6e34e43f5c275e08b",
+--    "0000000000000000000000000000000000000000000000000000000000000004":  "000000000000000000000000304a554a310c7e546dfe434669c62820b7d83490"
+--}
+
+--instance ToJSON VMStateDiff where
+--  toJSON state = object [
+--    "depth" .= 0,
+--    "error" .= "",
+--    "gas"   .= (vmGasRemaining state),
+--    "gasCost" .=  "",
+--    "memory" .= [],
+--    "op" .= "",
+--    "pc" .= "",
+--    "stack" .= []
+--    "storage" .= object []
+--    ]
+
+data VMStateDiff = VMStateDiff {
+    _depth :: Int,
+    _error::String,
+    _gas::Integer,
+    _gasCost::Integer,
+    _memory::T.Text,--Memory,
+    _op::Operation,
+    _pc::Word256,
+    _stack::T.Text, --[Word256],
+    _storage::T.Text --[String]
+  } deriving (Generic)
+
+instance ToJSON VMStateDiff where
+  toJSON = genericToJSON defaultOptions {
+             fieldLabelModifier = drop 1 }
+  
+wrapDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
+wrapDebugInfo e a b c op stateBefore stateAfter = do
+  sd <- makeStateDiff e a b c op stateBefore stateAfter :: VMM VMStateDiff
+  lift $ logInfoN $ T.pack $ show $ toJSON $ sd
+
+makeStateDiff::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (VMStateDiff)
+makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
+  kvs <- getAllStorageKeyVals
+  let storage = T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+
+  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  let memory = T.pack $ showMem 0 (B.unpack $ memByteString)
+
+  let sd = VMStateDiff depth error gas gasCost memory op pc' stack' storage
+  return sd
+    where
+      depth = (callDepth stateBefore)
+      error = ""
+      gas   = (vmGasRemaining stateAfter)
+      gasCost = (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
+      pc' = pc stateBefore
+      stack' = T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
+      
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 --printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
-printDebugInfo _ _ _15 _ op stateBefore stateAfter = do
+printDebugInfo = wrapDebugInfo
+--printDebugInfo e a b c op stateBefore stateAfter = do
+  --lift $ wrapDebugInfo $ e a b c op stateBefore stateAfter
 
   --CPP style trace
 {-  lift $ logInfoN $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   lift $ logInfoN $ "EVM [ eth ] "-}
 
   --GO style trace
-  lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
+  --lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
 
-  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  lift $ logInfoN "    STACK"
-  lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
-  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
-  lift $ logInfoN $ "    STORAGE"
-  kvs <- getAllStorageKeyVals
-  lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+  --memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  --lift $ logInfoN "    STACK"
+  --lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
+  --lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+  --lift $ logInfoN $ "    STORAGE"
+  --kvs <- getAllStorageKeyVals
+  --lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
 
 runCode::Int->VMM ()
