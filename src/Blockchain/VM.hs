@@ -870,7 +870,7 @@ makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
   let storage = T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  let memory = T.pack $ showMem 0 (B.unpack $ memByteString)
+  let memory = T.pack "" --$ showMem 0 (B.unpack $ memByteString)
 
   let sd = VMStateDiff depth error gas gasCost memory op pc' stack' storage
   return sd
@@ -879,7 +879,7 @@ makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
       error = ""
       gas   = (vmGasRemaining stateAfter)
       gasCost = (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
-      pc' = pc stateBefore
+      pc' = toInteger $ pc stateBefore
       stack' = T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
       
 
