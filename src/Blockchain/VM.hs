@@ -18,11 +18,13 @@ import Control.Monad.Trans.State
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Char
 import Data.Function
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Data.Time.Clock.POSIX
 import Numeric
 import Text.Printf
@@ -860,7 +862,7 @@ instance ToJSON VMStateDiff where
 wrapDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 wrapDebugInfo e a b c op stateBefore stateAfter = do
   sd <- makeStateDiff e a b c op stateBefore stateAfter :: VMM VMStateDiff
-  lift $ logInfoN $ T.pack $ show $ toJSON $ sd
+  lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ toJSON $ sd
 
 makeStateDiff::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (VMStateDiff)
 makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
