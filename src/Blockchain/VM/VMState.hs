@@ -82,7 +82,10 @@ data VMState =
 
     --These last two variable are only used for the Ethereum tests.
     isRunningTests::Bool,
-    debugCallCreates::Maybe [DebugCallCreate]
+    debugCallCreates::Maybe [DebugCallCreate],
+
+    -- history for state-diffs
+    lastState :: Maybe VMState
     
     }
 
@@ -117,7 +120,8 @@ startingState isRunningTests' isHomestead env dbs' = do
 
                --only used for running ethereum tests
                isRunningTests=isRunningTests',
-               debugCallCreates=Nothing
+               debugCallCreates=Nothing,
+               lastState=Nothing
              }
 
 {-
