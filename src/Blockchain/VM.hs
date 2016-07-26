@@ -844,25 +844,46 @@ instance ToJSON Operation where
 --    ]
 
 data VMStateDiff = VMStateDiff {
-    _depth :: Int,
-    _error::String,
-    _gas::Integer,
-    _gasCost::Integer,
-    _memory::T.Text,--Memory,
-    _op::Operation,
-    _pc::Word256,
-    _stack::T.Text, --[Word256],
-    _storage::T.Text --[String]
+    depth' :: Int,
+    error' ::String,
+    gas'   ::Integer,
+    gasCost'::Integer,
+    memory'::T.Text,--Memory,
+    op'::Operation,
+    pc'::Word256,
+    stack'::T.Text, --[Word256],
+    storage'::T.Text --[String]
   } deriving (Generic)
 
-instance ToJSON VMStateDiff where
-  toJSON = genericToJSON defaultOptions {
-             fieldLabelModifier = drop 1 }
-  
+--instance ToJSON VMStateDiff where
+--  toJSON = genericToJSON defaultOptions {
+--             fieldLabelModifier = drop 1 }
+
+--instance ToJSON VMStateDiff where
+--  toJSON sd = object [
+--    "depth" .= show $ depth' sd,
+--    "error" .= error' sd,
+--    "gas" .= show $ gas' sd,
+--    "gasCost" .= show $ gasCost' sd,
+--    "memory" .= memory' sd,
+--    "op" .= formatOp $ op' sd,
+--    "pc" .= show $ toInteger $ pc' sd,
+--    "stack" .= stack' sd,
+--    "storage" .= storage' sd
+--    ]
+
+makeStateDiffJSON::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (Value)
+makeStateDiffJSON e a b c op stateBefore stateAfter = do
+  let o = object ["boolean" .= True]
+  return o
+
+
 wrapDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 wrapDebugInfo e a b c op stateBefore stateAfter = do
-  sd <- makeStateDiff e a b c op stateBefore stateAfter :: VMM VMStateDiff
-  lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ toJSON $ sd
+  j <- makeStateDiffJSON e a b c op stateBefore stateAfter
+  lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ j
+  --sd <- makeStateDiff e a b c op stateBefore stateAfter :: VMM VMStateDiff
+  --lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ toJSON $ sd
 
 makeStateDiff::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (VMStateDiff)
 makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
@@ -870,7 +891,7 @@ makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
   let storage = T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  let memory = T.pack "" --$ showMem 0 (B.unpack $ memByteString)
+  let memory = T.pack "" -- $ showMem 0 (B.unpack $ memByteString)
 
   let sd = VMStateDiff depth error gas gasCost memory op pc' stack' storage
   return sd
@@ -879,7 +900,7 @@ makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
       error = ""
       gas   = (vmGasRemaining stateAfter)
       gasCost = (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
-      pc' = toInteger $ pc stateBefore
+      pc' = pc stateBefore
       stack' = T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
       
 
