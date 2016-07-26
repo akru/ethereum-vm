@@ -875,12 +875,12 @@ data VMStateDiff = VMStateDiff {
 makeStateDiffJSON::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (Value)
 makeStateDiffJSON e a b c op stateBefore stateAfter = do
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  let memory' = showMem 0 (B.unpack $ memByteString)
+  let memory' = showMem' 0 (B.unpack $ memByteString)
 
   let stack' = (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
 
   kvs <- getAllStorageKeyVals
-  let storage' = (map (\(k, v) -> "" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+  let storage' = (map (\(k, v) -> ("" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) , showHexU (fromIntegral v))) kvs)
   
   let o = object ["depth" .= (callDepth stateBefore),
                   "error" .= False,
