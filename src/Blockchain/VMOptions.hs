@@ -6,6 +6,7 @@ import Blockchain.Mining
 import HFlags
 
 defineFlag "debug" False "turn debug info on or off"
+defineFlag "json" False "generate json trace"
 defineFlag "altGenBlock" False "use the alternate stablenet genesis block"
 defineFlag "testnet" False "connect to testnet"
 defineFlag "createTransactionResults" False "stores transaction results in the SQL DB"

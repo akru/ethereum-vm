@@ -887,8 +887,8 @@ makeStateDiffJSON e a b c op stateBefore stateAfter = do
   return o
 
 
-wrapDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
-wrapDebugInfo e a b c op stateBefore stateAfter = do
+jsonDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
+jsonDebugInfo e a b c op stateBefore stateAfter = do
   j <- makeStateDiffJSON e a b c op stateBefore stateAfter
   lift $ logInfoN $ TE.decodeUtf8 $ BLC.toStrict $ encode $ j
   --sd <- makeStateDiff e a b c op stateBefore stateAfter :: VMM VMStateDiff
@@ -914,9 +914,8 @@ makeStateDiff _ _ _15 _ op stateBefore stateAfter = do
       
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
---printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
-printDebugInfo = wrapDebugInfo
---printDebugInfo e a b c op stateBefore stateAfter = do
+-- printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
+printDebugInfo e a b c op stateBefore stateAfter = do
   --lift $ wrapDebugInfo $ e a b c op stateBefore stateAfter
 
   --CPP style trace
@@ -924,15 +923,15 @@ printDebugInfo = wrapDebugInfo
   lift $ logInfoN $ "EVM [ eth ] "-}
 
   --GO style trace
-  --lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
+  lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
 
-  --memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
-  --lift $ logInfoN "    STACK"
-  --lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
-  --lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
-  --lift $ logInfoN $ "    STORAGE"
-  --kvs <- getAllStorageKeyVals
-  --lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  lift $ logInfoN "    STACK"
+  lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
+  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+  lift $ logInfoN $ "    STORAGE"
+  kvs <- getAllStorageKeyVals
+  lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
 
 runCode::Int->VMM ()
@@ -963,6 +962,7 @@ runCode c = do
       "EVM [ eth | " ++ show (callDepth vmState) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc vmState)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining vmState) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining result) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]\n"
 
   when flags_debug $ printDebugInfo (environment result) memBefore memAfter c op vmState result 
+  when flags_json  $ jsonDebugInfo (environment result) memBefore memAfter c op vmState result 
 
   case result of
     VMState{done=True} -> incrementPC len
