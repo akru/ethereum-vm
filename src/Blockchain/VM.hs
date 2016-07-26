@@ -874,7 +874,16 @@ data VMStateDiff = VMStateDiff {
 
 makeStateDiffJSON::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM (Value)
 makeStateDiffJSON e a b c op stateBefore stateAfter = do
-  let o = object ["boolean" .= True]
+  let o = object ["depth" .= (callDepth stateBefore),
+                  "error" .= False,
+                  "gas" .= show (vmGasRemaining stateAfter),
+                  "gasCost" .= show (vmGasRemaining stateBefore - vmGasRemaining stateAfter),
+                  "memory" .= False,
+                  "op" .= formatOp op,
+                  "pc" .= show (toInteger $ pc stateBefore),
+                  "stack" .= True,
+                  "storage" .= True
+                  ]
   return o
 
 
