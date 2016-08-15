@@ -808,9 +808,9 @@ formatOp (PUSH x) = "PUSH" ++ show (length x) -- ++ show x
 formatOp x = show x
 
 
-printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
+printTrace::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 --printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
-printDebugInfo _ _ _15 _ op stateBefore stateAfter = do
+printTrace _ _ _15 _ op stateBefore stateAfter = do
 
   --CPP style trace
 {-  lift $ logInfoN $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
@@ -822,11 +822,12 @@ printDebugInfo _ _ _15 _ op stateBefore stateAfter = do
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   lift $ logInfoN "    STACK"
   lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
-  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+--  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+{-  
   lift $ logInfoN $ "    STORAGE"
   kvs <- getAllStorageKeyVals
   lift $ logInfoN $ T.pack $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
-
+-}
 
 runCode::Int->VMM ()
 runCode c = do
@@ -855,7 +856,7 @@ runCode c = do
     vmTrace $
       "EVM [ eth | " ++ show (callDepth vmState) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc vmState)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining vmState) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining result) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]\n"
 
-  when flags_debug $ printDebugInfo (environment result) memBefore memAfter c op vmState result 
+  when flags_trace $ printTrace (environment result) memBefore memAfter c op vmState result 
 
   case result of
     VMState{done=True} -> incrementPC len
@@ -1106,6 +1107,7 @@ create_debugWrapper block owner value initCodeBytes = do
           forM_ (reverse $ logs finalVMState) addLog
           state' <- lift get
           lift $ put state'{suicideList = suicideList finalVMState}
+          addToRefund (refund finalVMState)
 
           return $ Just newAddress
 

@@ -49,6 +49,7 @@ import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.Stream.UnminedBlock
+import Blockchain.TheDAOFork
 import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verifier
@@ -99,6 +100,9 @@ addBlock isUnmined b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ setTitle $ "Block #" ++ show (blockDataNumber bd)
   logInfoN $ T.pack $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ format (blockHash b) ++ ")."
   setStateDBStateRoot $ bSumStateRoot bSum
+
+  when (blockDataNumber bd == 1920000) $ runTheDAOFork
+  
 
   s1 <- addToBalance (blockDataCoinbase bd) $ rewardBase flags_testnet
   when (not s1) $ error "addToBalance failed even after a check in addBlock"
