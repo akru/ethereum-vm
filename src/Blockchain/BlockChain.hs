@@ -163,7 +163,7 @@ addTransactions isUnmined b blockGas (t:rest) = do
   addTransactions isUnmined b remainingBlockGas rest
 
 blockIsHomestead::Block->Bool
-blockIsHomestead b = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
+blockIsHomestead b = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock || flags_alwaysUseHomestead
 
 addTransaction::Bool->Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
 addTransaction isRunningTests' b remainingBlockGas t = do

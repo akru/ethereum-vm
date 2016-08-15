@@ -14,4 +14,5 @@ defineFlag "queryBlocks" (10000::Int) "Number of blocks to query from SQL to pro
 defineFlag "miningVerification" True "Flag to turn mining verification or/off"
 defineFlag "transactionRootVerification" True "Flag to turn transaction root verification or/off"
 defineFlag "startingBlock" (0::Integer) "block in kafka to start running the VM on"
+defineFlag "alwaysUseHomestead" False "always enable Homestead additions the VM, rather than waiting until the Homestead block number"
 defineEQFlag "miner" [| Instant :: MinerType |] "MINER" "What mining algorithm"
