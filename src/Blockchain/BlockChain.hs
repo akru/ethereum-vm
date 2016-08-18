@@ -342,7 +342,8 @@ printTransactionMessage isUnmined t b f = do
       let (resultString, response, theTrace', theLogs) =
             case result of 
               Left err -> (err, "", [], []) --TODO keep the trace when the run fails
-              Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+              Right (state', _) -> 
+                (fromMaybe "Success!" $ fmap show $ vmException state', BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
 
       forM_ theLogs $ \log' -> do
         putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
