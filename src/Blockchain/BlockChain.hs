@@ -82,8 +82,15 @@ addBlocks isUnmined blocks = do
 
   logInfoN "done inserting, now will replace best if best is among the list"
 
+  when (not isUnmined) $ do
+    let highestDifficulty = maximum $ map (blockDataDifficulty . blockBlockData) blocks --maximum OK, since I filtered out the empty list case in a funciton pattern match
+    replaceBestIfBetter $ fromJust $ find ((highestDifficulty ==) . blockDataDifficulty . blockBlockData) blocks --fromJust is OK, because we just got this value from the list
+
+{-
   when (not isUnmined) $ 
     replaceBestIfBetter $ last blocks --last is OK, because we filter out blocks=[] in the case
+-}
+
 
 
 setTitle::String->IO()
