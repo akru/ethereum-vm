@@ -14,6 +14,7 @@ import Control.Monad.Logger
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import Data.List
@@ -21,9 +22,12 @@ import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
+
+import qualified Data.Aeson as Aeson
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Constants
@@ -49,6 +53,8 @@ import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.Stream.UnminedBlock
+import Blockchain.Stream.Raw
+import Blockchain.KafkaTopics
 import Blockchain.TheDAOFork
 import Blockchain.VMContext
 import Blockchain.VMOptions
@@ -58,6 +64,7 @@ import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
+import Network.Kafka.Protocol
 --import Debug.Trace
 
 timeit::(MonadIO m, MonadLogger m)=>String->m a->m a
@@ -153,7 +160,7 @@ addTransactions::Bool->Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ _ [] = return ()
 addTransactions isUnmined b blockGas (t:rest) = do
   result <-
-    printTransactionMessage isUnmined t b $
+    publishTransactionResult t b $
       runEitherT $ addTransaction False b blockGas t
 
   (_, remainingBlockGas) <-
@@ -372,6 +379,66 @@ printTransactionMessage isUnmined t b f = do
 
   return result
 
+publishTransactionResult::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
+publishTransactionResult t b f = do
+  tAddr <- getTransactionAddress t
+
+  nonce <- fmap addressStateNonce $ getAddressState tAddr
+
+  --stateRootBefore <- fmap MP.stateRoot getStateDB
+
+  beforeMap <- getAddressStateDBMap
+
+  before <- liftIO $ getPOSIXTime 
+
+  result <- f
+
+  after <- liftIO $ getPOSIXTime 
+
+  afterMap <- getAddressStateDBMap
+ 
+  --stateRootAfter <- fmap MP.stateRoot getStateDB
+  
+  let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
+      beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
+      afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
+      afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
+      modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
+
+  newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
+
+      --mpdb <- getStateDB
+      --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
+
+  let (resultString, response, theTrace', theLogs) =
+        case result of 
+             Left err -> (err, "", [], []) --TODO keep the trace when the run fails
+             Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', [], logs state')
+
+{-
+     forM_ theLogs $ \log' -> do
+         putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
+-}                                   
+
+  logInfoN $ T.pack $ show $ 
+            TransactionResult {
+               transactionResultBlockHash=blockHash b,
+               transactionResultTransactionHash=transactionHash t,
+               transactionResultMessage=resultString,
+               transactionResultResponse=response,
+               transactionResultTrace=theTrace',
+               transactionResultGasUsed=0,
+               transactionResultEtherUsed=0,
+               transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
+               transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
+               transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
+               transactionResultTime=realToFrac $ after - before::Double,
+               transactionResultNewStorage="",
+               transactionResultDeletedStorage=""
+               } 
+      
+  return result
+
 
 indexMaybe::[a]->Int->Maybe a
 indexMaybe _ i | i < 0 = error "indexMaybe called for i < 0"
@@ -400,3 +467,12 @@ replaceBestIfBetter b = do
     when flags_sqlDiff $ do
       sqlDiff newNumber (blockDataStateRoot oldBestBlock) newStateRoot
       putBestBlockInfo (blockHash b) (blockBlockData b)
+
+    when flags_diffPublish $ do
+      db <- getStateDB
+      diffs <- addrDbDiff db (blockDataStateRoot oldBestBlock) newStateRoot
+
+
+      logInfoN . T.decodeUtf8 . BL.toStrict $ Aeson.encode diffs
+      produceBytes "statediff" [BL.toStrict $ Aeson.encode diffs]
+      
