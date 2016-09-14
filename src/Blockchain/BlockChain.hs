@@ -41,6 +41,7 @@ import Blockchain.Data.DiffDB
 import Blockchain.Data.Extra
 import Blockchain.Data.Log
 import Blockchain.Data.LogDB
+import Blockchain.Data.StateDiff hiding (StateDiff(blockHash))
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
@@ -459,19 +460,19 @@ replaceBestIfBetter b = do
 
   let newNumber = blockDataNumber $ blockBlockData b
       newStateRoot = blockDataStateRoot $ blockBlockData b
+      oldStateRoot = blockDataStateRoot oldBestBlock
 
   logInfoN $ T.pack $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show (blockDataNumber oldBestBlock)
 
   when (newNumber > blockDataNumber oldBestBlock || newNumber == 0) $ do
-
+    let bH = blockHash b
     when flags_sqlDiff $ do
-      sqlDiff newNumber (blockDataStateRoot oldBestBlock) newStateRoot
-      putBestBlockInfo (blockHash b) (blockBlockData b)
+      sqlDiff newNumber bH (blockDataStateRoot oldBestBlock) newStateRoot
+      putBestBlockInfo bH (blockBlockData b)
 
     when flags_diffPublish $ do
       db <- getStateDB
-      diffs <- addrDbDiff db (blockDataStateRoot oldBestBlock) newStateRoot
-
+      diffs <- stateDiff newNumber bH oldStateRoot newStateRoot
 
       logInfoN . T.decodeUtf8 . BL.toStrict $ Aeson.encode diffs
       produceBytes "statediff" [BL.toStrict $ Aeson.encode diffs]
