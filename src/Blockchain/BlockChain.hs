@@ -466,14 +466,14 @@ replaceBestIfBetter b = do
 
   when (newNumber > blockDataNumber oldBestBlock || newNumber == 0) $ do
     let bH = blockHash b
+    diffs <- stateDiff newNumber bH oldStateRoot newStateRoot
+
     when flags_sqlDiff $ do
-      sqlDiff newNumber bH (blockDataStateRoot oldBestBlock) newStateRoot
+      commitSqlDiffs diffs
       putBestBlockInfo bH (blockBlockData b)
 
     when flags_diffPublish $ do
-      db <- getStateDB
-      diffs <- stateDiff newNumber bH oldStateRoot newStateRoot
+      let diffBS = BL.toStrict $ Aeson.encode diffs
+      logInfoN $ T.decodeUtf8 diffBS
+      produceBytes "statediff" [diffBS]
 
-      logInfoN . T.decodeUtf8 . BL.toStrict $ Aeson.encode diffs
-      produceBytes "statediff" [BL.toStrict $ Aeson.encode diffs]
-      
