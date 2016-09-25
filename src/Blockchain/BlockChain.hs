@@ -161,7 +161,7 @@ addTransactions::Bool->Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ _ [] = return ()
 addTransactions isUnmined b blockGas (t:rest) = do
   result <-
-    publishTransactionResult t b $
+    printTransactionMessage isUnmined t b $
       runEitherT $ addTransaction False b blockGas t
 
   (_, remainingBlockGas) <-
@@ -378,66 +378,6 @@ printTransactionMessage isUnmined t b f = do
   logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
-  return result
-
-publishTransactionResult::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
-publishTransactionResult t b f = do
-  tAddr <- getTransactionAddress t
-
-  nonce <- fmap addressStateNonce $ getAddressState tAddr
-
-  --stateRootBefore <- fmap MP.stateRoot getStateDB
-
-  beforeMap <- getAddressStateDBMap
-
-  before <- liftIO $ getPOSIXTime 
-
-  result <- f
-
-  after <- liftIO $ getPOSIXTime 
-
-  afterMap <- getAddressStateDBMap
- 
-  --stateRootAfter <- fmap MP.stateRoot getStateDB
-  
-  let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
-      beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
-      afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
-      afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
-      modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
-
-  newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
-
-      --mpdb <- getStateDB
-      --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
-
-  let (resultString, response, theTrace', theLogs) =
-        case result of 
-             Left err -> (err, "", [], []) --TODO keep the trace when the run fails
-             Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', [], logs state')
-
-{-
-     forM_ theLogs $ \log' -> do
-         putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
--}                                   
-
-  logInfoN $ T.pack $ show $ 
-            TransactionResult {
-               transactionResultBlockHash=blockHash b,
-               transactionResultTransactionHash=transactionHash t,
-               transactionResultMessage=resultString,
-               transactionResultResponse=response,
-               transactionResultTrace=theTrace',
-               transactionResultGasUsed=0,
-               transactionResultEtherUsed=0,
-               transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
-               transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
-               transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
-               transactionResultTime=realToFrac $ after - before::Double,
-               transactionResultNewStorage="",
-               transactionResultDeletedStorage=""
-               } 
-      
   return result
 
 
