@@ -56,6 +56,7 @@ ethereumVM = do
        Just block -> do
          let tm' = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
          putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
+         putBSum (blockHash block) (blockToBSum block) -- So that BLOCKHASH works in transactions
          addBlocks True [block]
        Nothing -> return ()
 
