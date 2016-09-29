@@ -62,6 +62,7 @@ import Blockchain.VMOptions
 import Blockchain.Verifier
 import Blockchain.VM
 import Blockchain.VM.Code
+import Blockchain.VM.Environment
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
@@ -89,8 +90,15 @@ addBlocks isUnmined blocks = do
 
   logInfoN "done inserting, now will replace best if best is among the list"
 
+  when (not isUnmined) $ do
+    let highestDifficulty = maximum $ map (blockDataDifficulty . blockBlockData) blocks --maximum OK, since I filtered out the empty list case in a funciton pattern match
+    replaceBestIfBetter $ fromJust $ find ((highestDifficulty ==) . blockDataDifficulty . blockBlockData) blocks --fromJust is OK, because we just got this value from the list
+
+{-
   when (not isUnmined) $ 
     replaceBestIfBetter $ last blocks --last is OK, because we filter out blocks=[] in the case
+-}
+
 
 
 setTitle::String->IO()
@@ -310,13 +318,14 @@ printTransactionMessage isUnmined t b f = do
   --let tAddr = fromJust $ whoSignedThisTransaction t
 
   nonce <- fmap addressStateNonce $ getAddressState tAddr
+  let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
   logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
   logInfoN $ T.pack $ CL.magenta "    |    " ++
     (
       if isMessageTX t
       then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
-      else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
+      else "Create Contract "  ++ show (pretty $ fromJust newAddrM)
     ) ++ CL.magenta " |"
 
 
@@ -340,9 +349,7 @@ printTransactionMessage isUnmined t b f = do
           beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
           afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
           afterDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList afterMap ]
-          modified = S.toList $ (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
-
-      newAddresses <- filterM (fmap not . NoCache.addressStateExists) modified
+          modified = (afterAddresses S.\\ afterDeletes) S.\\ (beforeAddresses S.\\ beforeDeletes)
 
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
@@ -351,6 +358,12 @@ printTransactionMessage isUnmined t b f = do
             case result of 
               Left err -> (err, "", [], []) --TODO keep the trace when the run fails
               Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+
+      let defaultNewAddrs = S.toList modified
+          moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
+          moveToFront _ = defaultNewAddrs
+
+      newAddresses <- filterM (fmap not . NoCache.addressStateExists) $ moveToFront newAddrM
 
       forM_ theLogs $ \log' -> do
         putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
