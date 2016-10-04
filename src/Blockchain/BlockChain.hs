@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, NamedFieldPuns #-}
 
 module Blockchain.BlockChain (
   addBlock,
@@ -31,6 +31,7 @@ import qualified Data.Aeson as Aeson
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Constants
+import Blockchain.SHA
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -84,15 +85,15 @@ addBlocks isUnmined blocks = do
                                    ++ " block starting with " 
                                    ++ (show . blockDataNumber . blockBlockData . head $ blocks) 
 
-
-  _ <- forM (filter ((/= 0) . blockDataNumber . blockBlockData) blocks) $ \block ->
-    timeit "Block insertion" $ addBlock isUnmined block
+  let blocks' = filter ((/= 0) . blockDataNumber . blockBlockData) blocks
+  txResults<- forM blocks' $ timeit "Block insertion" . addBlock isUnmined 
 
   logInfoN "done inserting, now will replace best if best is among the list"
 
   when (not isUnmined) $ do
-    let highestDifficulty = maximum $ map (blockDataDifficulty . blockBlockData) blocks --maximum OK, since I filtered out the empty list case in a funciton pattern match
-    replaceBestIfBetter $ fromJust $ find ((highestDifficulty ==) . blockDataDifficulty . blockBlockData) blocks --fromJust is OK, because we just got this value from the list
+    let highestDifficulty = maximum $ map (blockDataDifficulty . blockBlockData) blocks' --maximum OK, since I filtered out the empty list case in a funciton pattern match
+        blockTXs = zip blocks' txResults
+    replaceBestIfBetter $ fromJust $ find ((highestDifficulty ==) . blockDataDifficulty . blockBlockData . fst) blockTXs --fromJust is OK, because we just got this value from the list
 
 {-
   when (not isUnmined) $ 
@@ -106,7 +107,7 @@ setTitle value = do
   putStr $ "\ESC]0;" ++ value ++ "\007"
 
 
-addBlock::Bool->Block->ContextM ()
+addBlock::Bool->Block->ContextM (M.Map SHA TXResult)
 addBlock isUnmined b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 --  when (blockDataNumber bd > 100000) $ error "you have hit 100,000"
 --  liftIO $ putStrLn $ "in addBlock with parentHash: " ++ (format . blockDataParentHash $ bd)
@@ -133,7 +134,7 @@ addBlock isUnmined b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
   let transactions = blockReceiptTransactions b
 
-  addTransactions isUnmined b (blockDataGasLimit $ blockBlockData b) transactions
+  txResultsAssoc <- addTransactions isUnmined b (blockDataGasLimit $ blockBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
@@ -165,10 +166,12 @@ addBlock isUnmined b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
   logInfoN $ T.pack $ "Inserted block became #" ++ show (blockDataNumber $ blockBlockData b') ++ " (" ++ format (blockHash b') ++ ")."
 
-addTransactions::Bool->Block->Integer->[Transaction]->ContextM ()
-addTransactions _ _ _ [] = return ()
+  return $ M.fromList txResultsAssoc
+
+addTransactions::Bool->Block->Integer->[Transaction]->ContextM [(SHA, TXResult)]
+addTransactions _ _ _ [] = return []
 addTransactions isUnmined b blockGas (t:rest) = do
-  result <-
+  (result, txResult) <-
     printTransactionMessage isUnmined t b $
       runEitherT $ addTransaction False b blockGas t
 
@@ -179,7 +182,8 @@ addTransactions isUnmined b blockGas (t:rest) = do
           return (S.empty, blockGas)
       Right (resultState, g') -> return (suicideList resultState, g')
 
-  addTransactions isUnmined b remainingBlockGas rest
+  txResultsRest <- addTransactions isUnmined b remainingBlockGas rest
+  return $ (transactionHash t, txResult) : txResultsRest
 
 blockIsHomestead::Block->Bool
 blockIsHomestead b = blockDataNumber (blockBlockData b) >= gHomesteadFirstBlock
@@ -312,7 +316,7 @@ intrinsicGas isHomestead t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromInteg
       txCost _ = if isHomestead then gCREATETX else gTX
 
 
-printTransactionMessage::Bool->Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
+printTransactionMessage::Bool->Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer), TXResult)
 printTransactionMessage isUnmined t b f = do
   tAddr <- getTransactionAddress t
   --let tAddr = fromJust $ whoSignedThisTransaction t
@@ -343,6 +347,24 @@ printTransactionMessage isUnmined t b f = do
  
   --stateRootAfter <- fmap MP.stateRoot getStateDB
       
+  let 
+    (message, response, gasRemaining, theTrace', theLogs) =
+      case result of 
+        Left err -> (err, "", 0, [], []) -- TODO Also include the trace
+        Right (state', _) -> ("Success!", txResponse, vmGasRemaining state', vmTrace, logs state')
+          where
+            vmTrace = unlines $ reverse $ theTrace state'
+            txResponse = BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state'
+    gasUsed = fromInteger $ transactionGasLimit t - gasRemaining
+    etherUsed = gasUsed * fromInteger (transactionGasLimit t)
+    txResult =
+      TXResult {
+        message,
+        response,
+        etherUsed,
+        time = realToFrac $ after - before
+        }
+
   unless isUnmined $
     when flags_createTransactionResults $ do
       let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
@@ -353,11 +375,6 @@ printTransactionMessage isUnmined t b f = do
 
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
-
-      let (resultString, response, theTrace', theLogs) =
-            case result of 
-              Left err -> (err, "", [], []) --TODO keep the trace when the run fails
-              Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
 
       let defaultNewAddrs = S.toList modified
           moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
@@ -372,11 +389,11 @@ printTransactionMessage isUnmined t b f = do
              TransactionResult {
                transactionResultBlockHash=blockHash b,
                transactionResultTransactionHash=transactionHash t,
-               transactionResultMessage=resultString,
+               transactionResultMessage=message,
                transactionResultResponse=response,
                transactionResultTrace=theTrace',
-               transactionResultGasUsed=0,
-               transactionResultEtherUsed=0,
+               transactionResultGasUsed=gasUsed,
+               transactionResultEtherUsed=etherUsed,
                transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
                transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
                transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
@@ -391,7 +408,7 @@ printTransactionMessage isUnmined t b f = do
   logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
-  return result
+  return (result, txResult)
 
 
 indexMaybe::[a]->Int->Maybe a
@@ -407,8 +424,8 @@ formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 
 ----------------
 
-replaceBestIfBetter::Block->ContextM ()
-replaceBestIfBetter b = do
+replaceBestIfBetter::(Block, M.Map SHA TXResult)->ContextM ()
+replaceBestIfBetter (b, txResults) = do
   (_, oldBestBlock) <- getBestBlockInfo
 
   let newNumber = blockDataNumber $ blockBlockData b
@@ -419,7 +436,7 @@ replaceBestIfBetter b = do
 
   when (newNumber > blockDataNumber oldBestBlock || newNumber == 0) $ do
     let bH = blockHash b
-    diffs <- stateDiff newNumber bH oldStateRoot newStateRoot
+    diffs <- stateDiff newNumber bH txResults oldStateRoot newStateRoot
 
     when flags_sqlDiff $ do
       commitSqlDiffs diffs
