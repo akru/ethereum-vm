@@ -376,6 +376,12 @@ printTransactionMessage isUnmined t b f = do
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
+      let (resultString, response, theTrace', theLogs) =
+            case result of 
+              Left err -> (err, "", [], []) --TODO keep the trace when the run fails
+              Right (state', _) -> 
+                (fromMaybe "Success!" $ fmap show $ vmException state', BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+
       let defaultNewAddrs = S.toList modified
           moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
           moveToFront _ = defaultNewAddrs
