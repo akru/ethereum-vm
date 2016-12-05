@@ -4,9 +4,10 @@ module Blockchain.VM.Environment where
 import qualified Data.ByteString as B
 
 import Blockchain.Data.Address
-import Blockchain.Data.DataDefs
 import Blockchain.Data.Code
 import Blockchain.ExtWord
+
+import Blockchain.Sequencer.Event (OutputBlock(..))
 
 data Environment =
     Environment {
@@ -18,6 +19,6 @@ data Environment =
       envValue::Integer,
       envCode::Code,
       envJumpDests::[Word256],
-      envBlock::Block
+      envBlock::OutputBlock
     }
 

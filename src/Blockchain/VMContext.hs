@@ -54,7 +54,7 @@ data Context =
     contextBlockSummaryDB::BlockSummaryDB,
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
-    contextWhoSignedThisTransaction::Transaction->Address,
+    contextWhoSignedThisTransaction::Transaction->Address, -- delete this
     contextAddressStateDBMap::M.Map Address AddressStateModification,
     contextStorageMap::M.Map (Address, Word256) Word256
     }
@@ -158,7 +158,7 @@ putCachedBestProcessedBlock b = do
   cxt <- get
   put cxt{cachedBestProcessedBlock=Just b}
 
-getTransactionAddress::Transaction->ContextM Address
+getTransactionAddress::Transaction->ContextM Address -- delete this
 getTransactionAddress t = do
   cxt <- get
   return $ contextWhoSignedThisTransaction cxt t

@@ -45,6 +45,7 @@ import Blockchain.DB.StateDB
 import Blockchain.DB.StorageDB
 import Blockchain.ExtWord
 import Blockchain.VMOptions
+import Blockchain.Sequencer.Event
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VM.Code
@@ -317,7 +318,7 @@ runOperation BLOCKHASH = do
   number' <- pop::VMM Word256
 
   currentBlock <- getEnvVar envBlock
-  let currentBlockNumber = blockDataNumber . blockBlockData $ currentBlock
+  let currentBlockNumber = blockDataNumber . obBlockData $ currentBlock
 
   let inRange = not $ toInteger number' >= currentBlockNumber || 
                 toInteger number' < currentBlockNumber - 256
@@ -327,7 +328,7 @@ runOperation BLOCKHASH = do
   case (inRange, isRunningTests vmState) of
    (False, _) -> push (0::Word256)
    (True, False) -> do
-          maybeBlockHash <- getBlockHashWithNumber (fromIntegral number') $ blockHash currentBlock
+          maybeBlockHash <- getBlockHashWithNumber (fromIntegral number') $ outputBlockHash currentBlock
           case maybeBlockHash of
            Nothing -> push (0::Word256)
            Just theBlockHash -> push theBlockHash
@@ -335,16 +336,16 @@ runOperation BLOCKHASH = do
           let SHA h = hash $ BC.pack $ show $ toInteger number'
           push h
 
-runOperation COINBASE = pushEnvVar (blockDataCoinbase . blockBlockData . envBlock)
+runOperation COINBASE = pushEnvVar (blockDataCoinbase . obBlockData . envBlock)
 runOperation TIMESTAMP = do
   VMState{environment=env} <- lift get
-  push $ ((round . utcTimeToPOSIXSeconds . blockDataTimestamp . blockBlockData . envBlock) env::Word256)
+  push $ ((round . utcTimeToPOSIXSeconds . blockDataTimestamp . obBlockData . envBlock) env::Word256)
 
 
   
-runOperation NUMBER = pushEnvVar (blockDataNumber . blockBlockData . envBlock)
-runOperation DIFFICULTY = pushEnvVar (blockDataDifficulty . blockBlockData . envBlock)
-runOperation GASLIMIT = pushEnvVar (blockDataGasLimit . blockBlockData . envBlock)
+runOperation NUMBER = pushEnvVar (blockDataNumber . obBlockData . envBlock)
+runOperation DIFFICULTY = pushEnvVar (blockDataDifficulty . obBlockData . envBlock)
+runOperation GASLIMIT = pushEnvVar (blockDataGasLimit . obBlockData . envBlock)
 
 runOperation POP = do
   _ <- pop::VMM Word256
@@ -909,7 +910,7 @@ runVMM isRunningTests' isHomestead preExistingSuicideList callDepth' env availab
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
-create::Bool->Bool->S.Set Address->Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
+create::Bool->Bool->S.Set Address->OutputBlock->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
 create isRunningTests' isHomestead preExistingSuicideList b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
   let env =
         Environment{
@@ -1003,7 +1004,7 @@ create' = do
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call::Bool->Bool->Bool->S.Set Address->Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
+call::Bool->Bool->Bool->S.Set Address->OutputBlock->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
 call isRunningTests' isHomestead noValueTransfer preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- getAddressState $ Address codeAddress
@@ -1062,7 +1063,7 @@ call' noValueTransfer = do
 
 
 
-create_debugWrapper::Block->Address->Word256->B.ByteString->VMM (Maybe Address)
+create_debugWrapper::OutputBlock->Address->Word256->B.ByteString->VMM (Maybe Address)
 create_debugWrapper block owner value initCodeBytes = do
 
   addressState <- getAddressState owner

@@ -26,8 +26,12 @@ import Blockchain.DB.SQLDB
 import Blockchain.EthConf
 import Blockchain.VMOptions
 import Blockchain.VMContext
+import Blockchain.Sequencer.Event
+import Blockchain.Sequencer.Kafka
 import Blockchain.Stream.VMEvent
 import Blockchain.Quarry
+
+import Blockchain.VM.Helpers
 
 ethereumVM::LoggingT IO ()
 ethereumVM = do
@@ -36,29 +40,30 @@ ethereumVM = do
   runContextM $ do
     addFirstBlockToBSum
     forever $ do
-      logInfoN "Getting Blocks"
-      vmEvents <- getUnprocessedKafkaBlocks offsetIORef
+      logInfoN "Getting Blocks/Txs"
+      seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
-      let blocks = [b | ChainBlock b <- vmEvents]
+      let blocks = [b | OEBlock b <- seqEvents]
 
       logInfoN "creating transactionMap"
-      let tm = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< blocks
+      let tm = M.fromList $ (map (\OutputTx{otBaseTx=bt, otSigner=s} -> (transactionHash bt, fromJust s)) . obReceiptTransactions) =<< blocks
       putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
       logInfoN "done creating transactionMap"
 
       forM_ blocks $ \b -> do
-        putBSum (blockHash b) (blockToBSum b)
-            
+        putBSum (outputBlockHash b) (outputBlockToBlockSummary b)
+
       addBlocks False blocks
 
 
-      when (not $ null [1::Integer | NewUnminedBlockAvailable <- vmEvents]) $ do
+      when (not $ null [t | OETx t <- seqEvents]) $ do -- change NewUnminedBlockAvailable -> (OETx _ _ _ _ _)
         pool <- getSQLDB
         maybeBlock <- SQL.runSqlPool makeNewBlock pool
 
         case maybeBlock of
-         Just block -> do
-           let tm' = M.fromList $ (map (\t -> (transactionHash t, fromJust $ whoSignedThisTransaction t)) . blockReceiptTransactions) =<< [block]
+         Just quarryBlock -> do
+           let block = quarryBlockToOutputBlock quarryBlock
+               tm' = M.fromList $ (map (\OutputTx{otBaseTx=bt, otSigner=s} -> (transactionHash bt, fromJust s)) . obReceiptTransactions) =<< [block]
            putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
            logInfoN $ "inserting a block from the unmined block list"
            addBlocks True [block]
@@ -74,24 +79,20 @@ addFirstBlockToBSum = do
   putBSum (blockHash first) (blockToBSum first)
   return ()
 
-getUnprocessedKafkaBlocks::(MonadIO m, MonadLogger m)=>
-                           IORef Integer->m [VMEvent]
-getUnprocessedKafkaBlocks offsetIORef = do
+getUnprocessedKafkaEvents::(MonadIO m, MonadLogger m)=>
+                           IORef Integer->m [OutputEvent]
+getUnprocessedKafkaEvents offsetIORef = do
   offset <- liftIO $ readIORef offsetIORef
-  logInfoN $ T.pack $ "Fetching recently mined blocks with offset " ++ (show offset)
+  logInfoN $ T.pack $ "Fetching sequenced blockchain events with offset " ++ (show offset)
   ret <-
       liftIO $ runKafkaConfigured "ethereum-vm" $ do
-        stateRequiredAcks .= -1
-        stateWaitSize .= 1
-        stateWaitTime .= 100000
-        --offset <- getLastOffset LatestTime 0 "thetopic"
-        vmEvents <- fetchVMEvents $ Offset $ fromIntegral offset
-        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length vmEvents)
+        seqEvents <- readSeqEvents $ Offset $ fromIntegral offset
+        liftIO $ writeIORef offsetIORef $ offset + fromIntegral (length seqEvents)
    
-        return vmEvents
+        return seqEvents
 
   case ret of
     Left e -> error $ show e
     Right v -> do 
-      logInfoN . T.pack $ "Got: " ++ (show . length $ v) ++ " unprocessed blocks"
+      logInfoN . T.pack $ "Got: " ++ (show . length $ v) ++ " unprocessed blocks/txs"
       return v

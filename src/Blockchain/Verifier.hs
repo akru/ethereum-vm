@@ -21,11 +21,14 @@ import Blockchain.Mining
 import Blockchain.Mining.Normal
 import Blockchain.Mining.Instant
 import Blockchain.Mining.SHA
+import Blockchain.Sequencer.Event
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verification
+
+import Data.Maybe (fromJust)
 
 --import Debug.Trace
 
@@ -37,8 +40,9 @@ nextGasLimit oldGasLimit oldGasUsed = max (max 125000 3141592) ((oldGasLimit * 1
 nextGasLimitDelta::Integer->Integer
 nextGasLimitDelta oldGasLimit  = oldGasLimit `div` 1024
 
-checkUnclesHash::Block->Bool
-checkUnclesHash b = blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockBlockUncles b))
+checkUnclesHash::OutputBlock->Bool
+checkUnclesHash OutputBlock{obBlockData=bd,obBlockUncles=bus} =
+    blockDataUnclesHash bd == hash (rlpSerialize $ RLPArray (rlpEncode <$> bus))
 
 --data BlockValidityError = BlockDifficultyWrong Integer Integer | BlockNumberWrong Integer Integer | BlockGasLimitWrong Integer Integer | BlockNonceWrong | BlockUnclesHashWrong
 {-
@@ -47,8 +51,8 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-checkParentChildValidity::(Monad m)=>Bool->Block->BlockSummary->m ()
-checkParentChildValidity isHomestead Block{blockBlockData=c} parentBSum = do
+checkParentChildValidity::(Monad m)=>Bool->OutputBlock->BlockSummary->m ()
+checkParentChildValidity isHomestead OutputBlock{obBlockData=c} parentBSum = do
     let nextDifficulty' = if isHomestead then homesteadNextDifficulty else nextDifficulty
     unless (blockDataDifficulty c == nextDifficulty' flags_testnet (bSumNumber parentBSum) (bSumDifficulty parentBSum) (bSumTimestamp parentBSum) (blockDataTimestamp c))
              $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++
@@ -75,22 +79,21 @@ addAllKVs mpdb (x:rest) = do
   mpdb' <- MP.unsafePutKeyVal mpdb (byteString2NibbleString $ rlpSerialize $ rlpEncode $ fst x) (rlpEncode $ rlpSerialize $ rlpEncode $ snd x)
   addAllKVs mpdb' rest
 
-verifyTransactionRoot'::Block -> (Bool,MP.StateRoot)
-verifyTransactionRoot' b = ( blockDataTransactionsRoot bd == tVal , tVal) where
-  bd = blockBlockData b 
-  tVal = transactionsVerificationValue $ blockReceiptTransactions b
+verifyTransactionRoot'::OutputBlock -> (Bool,MP.StateRoot)
+verifyTransactionRoot' OutputBlock{obBlockData=bd,obReceiptTransactions=txs} =
+    let tVal = transactionsVerificationValue (otBaseTx <$> txs) in (blockDataTransactionsRoot bd == tVal, tVal)
 
-verifyTransactionRoot::(MonadResource m, HasStateDB m)=>Block->m (Bool,MP.StateRoot)
-verifyTransactionRoot b = do
+verifyTransactionRoot::(MonadResource m, HasStateDB m)=>OutputBlock->m (Bool,MP.StateRoot)
+verifyTransactionRoot OutputBlock{obBlockData=bd,obReceiptTransactions=txs} = do
   mpdb <- getStateDB
 
-  MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ blockReceiptTransactions b
-  return (blockDataTransactionsRoot (blockBlockData b) == sr, sr)
+  MP.MPDB{MP.stateRoot=sr} <- addAllKVs mpdb{MP.stateRoot=MP.emptyTriePtr} $ zip [0..] $ (otBaseTx <$> txs)
+  return (blockDataTransactionsRoot bd == sr, sr)
 
-verifyOmmersRoot::(MonadResource m, HasStateDB m)=>Block->m Bool
-verifyOmmersRoot b = return $ blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray $ map rlpEncode $ blockBlockUncles b)
+verifyOmmersRoot::(MonadResource m, HasStateDB m)=>OutputBlock->m Bool
+verifyOmmersRoot OutputBlock{obBlockData=bd, obBlockUncles=bu} = return $ blockDataUnclesHash bd == hash (rlpSerialize $ RLPArray $ map rlpEncode $ bu)
 
-checkValidity::Monad m=>Bool->Bool->BlockSummary->Block->ContextM (m ())
+checkValidity::Monad m=>Bool->Bool->BlockSummary->OutputBlock->ContextM (m ())
 checkValidity partialBlock isHomestead parentBSum b = do
   when (flags_transactionRootVerification) $ do
            trVerified <- verifyTransactionRoot b
@@ -104,7 +107,7 @@ checkValidity partialBlock isHomestead parentBSum b = do
   when (not ommersVerified) $ error "ommersRoot doesn't match uncles"
   checkParentChildValidity isHomestead b parentBSum
   when (flags_miningVerification && not partialBlock) $ do
-    let miningVerified = (verify verifier) b
+    let miningVerified = (verify verifier) (outputBlockToBlock b) -- todo: dont wanna rewrite adit just yet
     unless miningVerified $ fail "block falsely mined, verification failed"
   --nIsValid <- nonceIsValid' b
   --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
@@ -118,12 +121,9 @@ checkValidity partialBlock isHomestead parentBSum b = do
                     transactionsTrie = 0,
 -}
 
-
-
-
-isNonceValid::Transaction->ContextM Bool
+isNonceValid :: OutputTx -> ContextM Bool
 isNonceValid t = do
-  tAddr <- getTransactionAddress t
-  --let tAddr = fromJust $ whoSignedThisTransaction t
-  addressState <- getAddressState tAddr
-  return $ addressStateNonce addressState == transactionNonce t
+  let txAddr  = fromJust . otSigner $ t
+      txNonce = transactionNonce . otBaseTx $ t
+  addressState <- getAddressState txAddr
+  return $ addressStateNonce addressState == txNonce
