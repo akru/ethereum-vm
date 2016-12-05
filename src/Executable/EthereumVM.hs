@@ -46,8 +46,6 @@ ethereumVM = do
       let blocks = [b | OEBlock b <- seqEvents]
 
       logInfoN "creating transactionMap"
-      let tm = M.fromList $ (map (\OutputTx{otBaseTx=bt, otSigner=s} -> (transactionHash bt, fromJust s)) . obReceiptTransactions) =<< blocks
-      putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm . transactionHash
       logInfoN "done creating transactionMap"
 
       forM_ blocks $ \b -> do
@@ -63,8 +61,6 @@ ethereumVM = do
         case maybeBlock of
          Just quarryBlock -> do
            let block = quarryBlockToOutputBlock quarryBlock
-               tm' = M.fromList $ (map (\OutputTx{otBaseTx=bt, otSigner=s} -> (transactionHash bt, fromJust s)) . obReceiptTransactions) =<< [block]
-           putWSTT $ fromMaybe (error "missing value in transaction map") . flip M.lookup tm' . transactionHash
            logInfoN $ "inserting a block from the unmined block list"
            addBlocks True [block]
          Nothing -> do

@@ -8,8 +8,6 @@ module Blockchain.VMContext (
 --  clearDebugMsg,
   getCachedBestProcessedBlock,
   putCachedBestProcessedBlock,      
-  getTransactionAddress,
-  putWSTT,
   incrementNonce,
   getNewAddress,
   purgeStorageMap
@@ -54,7 +52,6 @@ data Context =
     contextBlockSummaryDB::BlockSummaryDB,
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
-    contextWhoSignedThisTransaction::Transaction->Address, -- delete this
     contextAddressStateDBMap::M.Map Address AddressStateModification,
     contextStorageMap::M.Map (Address, Word256) Word256
     }
@@ -130,7 +127,6 @@ runContextM f = do
                    blksumdb
                    conn
                    Nothing
-                   (error "contextWhoSignedThisTransaction not set")
                    M.empty
                    M.empty)
 
@@ -157,16 +153,6 @@ putCachedBestProcessedBlock::Block->ContextM ()
 putCachedBestProcessedBlock b = do
   cxt <- get
   put cxt{cachedBestProcessedBlock=Just b}
-
-getTransactionAddress::Transaction->ContextM Address -- delete this
-getTransactionAddress t = do
-  cxt <- get
-  return $ contextWhoSignedThisTransaction cxt t
-
-putWSTT::(Transaction->Address)->ContextM ()
-putWSTT wstt = do
-  cxt <- get
-  put cxt{contextWhoSignedThisTransaction=wstt}
 
 incrementNonce::(HasMemAddressStateDB m, HasStateDB m, HasHashDB m)=>
                 Address->m ()
