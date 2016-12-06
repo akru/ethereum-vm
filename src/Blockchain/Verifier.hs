@@ -28,7 +28,6 @@ import Blockchain.VMContext
 import Blockchain.VMOptions
 import Blockchain.Verification
 
-import Data.Maybe (fromJust)
 
 --import Debug.Trace
 
@@ -122,8 +121,7 @@ checkValidity partialBlock isHomestead parentBSum b = do
 -}
 
 isNonceValid :: OutputTx -> ContextM Bool
-isNonceValid t = do
-  let txAddr  = fromJust . otSigner $ t
-      txNonce = transactionNonce . otBaseTx $ t
+isNonceValid OutputTx{otBaseTx=base, otSigner=txAddr} = do
+  let txNonce = transactionNonce base
   addressState <- getAddressState txAddr
   return $ addressStateNonce addressState == txNonce

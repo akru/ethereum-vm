@@ -185,9 +185,7 @@ blockIsHomestead::OutputBlock->Bool
 blockIsHomestead OutputBlock{obBlockData=bd} = blockDataNumber bd >= gHomesteadFirstBlock
 
 addTransaction::Bool->OutputBlock->Integer->OutputTx->EitherT String ContextM (VMState, Integer)
-addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=signer} = do
-  let tAddr = fromJust signer
-
+addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=tAddr} = do
   nonceValid <- lift $ isNonceValid t
 
   let isHomestead = blockIsHomestead b
@@ -312,8 +310,7 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
 
 
 printTransactionMessage::Bool->OutputTx->OutputBlock->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer), TXResult)
-printTransactionMessage isUnmined OutputTx{otBaseTx=t, otSigner=tAddr'} b f = do
-  let tAddr = fromJust tAddr'
+printTransactionMessage isUnmined OutputTx{otBaseTx=t, otSigner=tAddr} b f = do
   nonce <- fmap addressStateNonce $ getAddressState tAddr
   let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
