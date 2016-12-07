@@ -34,25 +34,18 @@ import Blockchain.Quarry
 ethereumVM::LoggingT IO ()
 ethereumVM = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
-
   runContextM $ do
-    addFirstBlockToBSum
+    addFirstBlockToBSumSequencer
     forever $ do
       logInfoN "Getting Blocks/Txs"
       seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
       let blocks = [b | OEBlock b <- seqEvents]
-
-      logInfoN "creating transactionMap"
-      logInfoN "done creating transactionMap"
-
-      forM_ blocks $ \b -> do
-        putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
-
+      forM_ blocks $ \b -> putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
       addBlocks False blocks
 
-
-      when (not $ null [t | OETx t <- seqEvents]) $ do -- change NewUnminedBlockAvailable -> (OETx _ _ _ _ _)
+      let newTXs = [t | OETx t <- seqEvents]
+      unless (null newTXs) $ do
         pool <- getSQLDB
         maybeBlock <- SQL.runSqlPool makeNewBlock pool
 
@@ -73,12 +66,6 @@ addFirstBlockToBSumSequencer = do
     (OEBlock block) <- head <$> getUnprocessedKafkaEvents dummyIORef
     putBSum (outputBlockHash block) (blockHeaderToBSum $ obBlockData block)
     return ()
-
-addFirstBlockToBSum::HasBlockSummaryDB m=>m ()
-addFirstBlockToBSum = do
-  Just (ChainBlock first:_) <- liftIO $ fetchVMEventsIO 0
-  putBSum (blockHash first) (blockHeaderToBSum $ blockBlockData first)
-  return ()
 
 getUnprocessedKafkaEvents::(MonadIO m, MonadLogger m)=>
                            IORef Integer->m [OutputEvent]
