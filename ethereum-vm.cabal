@@ -70,7 +70,6 @@ library
                      Blockchain.VM.Environment
                      Blockchain.VM.Opcodes
                      Blockchain.VM.VMState
-                     Blockchain.VM.Helpers
                      Executable.EthereumVM  
     other-modules:
                   Blockchain.DB.ModifyStateDB

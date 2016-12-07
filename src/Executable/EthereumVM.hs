@@ -31,8 +31,6 @@ import Blockchain.Sequencer.Kafka
 import Blockchain.Stream.VMEvent
 import Blockchain.Quarry
 
-import Blockchain.VM.Helpers
-
 ethereumVM::LoggingT IO ()
 ethereumVM = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
@@ -49,7 +47,7 @@ ethereumVM = do
       logInfoN "done creating transactionMap"
 
       forM_ blocks $ \b -> do
-        putBSum (outputBlockHash b) (outputBlockToBlockSummary b)
+        putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
 
       addBlocks False blocks
 
@@ -69,10 +67,17 @@ ethereumVM = do
 
   return ()
 
+addFirstBlockToBSumSequencer :: (MonadLogger m, HasBlockSummaryDB m) => m ()
+addFirstBlockToBSumSequencer = do
+    dummyIORef      <- liftIO $ newIORef (0 :: Integer)
+    (OEBlock block) <- head <$> getUnprocessedKafkaEvents dummyIORef
+    putBSum (outputBlockHash block) (blockHeaderToBSum $ obBlockData block)
+    return ()
+
 addFirstBlockToBSum::HasBlockSummaryDB m=>m ()
 addFirstBlockToBSum = do
   Just (ChainBlock first:_) <- liftIO $ fetchVMEventsIO 0
-  putBSum (blockHash first) (blockToBSum first)
+  putBSum (blockHash first) (blockHeaderToBSum $ blockBlockData first)
   return ()
 
 getUnprocessedKafkaEvents::(MonadIO m, MonadLogger m)=>
