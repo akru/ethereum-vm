@@ -179,7 +179,7 @@ addTransactions isUnmined b blockGas (t:rest) = do
       Right (resultState, g') -> return (suicideList resultState, g')
 
   txResultsRest <- addTransactions isUnmined b remainingBlockGas rest
-  return $ (transactionHash . otBaseTx $ t, txResult) : txResultsRest
+  return $ (otHash t, txResult) : txResultsRest
 
 blockIsHomestead::OutputBlock->Bool
 blockIsHomestead OutputBlock{obBlockData=bd} = blockDataNumber bd >= gHomesteadFirstBlock
@@ -310,7 +310,7 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
 
 
 printTransactionMessage::Bool->OutputTx->OutputBlock->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer), TXResult)
-printTransactionMessage isUnmined OutputTx{otBaseTx=t, otSigner=tAddr} b f = do
+printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} b f = do
   nonce <- fmap addressStateNonce $ getAddressState tAddr
   let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
@@ -379,12 +379,12 @@ printTransactionMessage isUnmined OutputTx{otBaseTx=t, otSigner=tAddr} b f = do
       newAddresses <- filterM (fmap not . NoCache.addressStateExists) $ moveToFront newAddrM
 
       forM_ theLogs $ \log' -> do
-        putLogDB $ LogDB (transactionHash t) tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
+        putLogDB $ LogDB txHash tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
                                    
       _ <- putTransactionResult $
              TransactionResult {
                transactionResultBlockHash=outputBlockHash b,
-               transactionResultTransactionHash=transactionHash t,
+               transactionResultTransactionHash=txHash,
                transactionResultMessage=message,
                transactionResultResponse=response,
                transactionResultTrace=theTrace',

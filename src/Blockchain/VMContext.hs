@@ -28,7 +28,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
-import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.CodeDB
@@ -42,6 +41,9 @@ import Blockchain.EthConf
 import Blockchain.ExtWord
 import Blockchain.VMOptions
 
+import Blockchain.Bagger
+import Blockchain.Bagger.BaggerState (BaggerState, defaultBaggerState)
+
 --import Debug.Trace
 
 data Context =
@@ -53,7 +55,8 @@ data Context =
     contextSQLDB::SQLDB,
     cachedBestProcessedBlock::Maybe Block,
     contextAddressStateDBMap::M.Map Address AddressStateModification,
-    contextStorageMap::M.Map (Address, Word256) Word256
+    contextStorageMap::M.Map (Address, Word256) Word256,
+    contextBaggerState :: BaggerState
     }
 
 type ContextM = StateT Context (ResourceT (LoggingT IO))
@@ -74,7 +77,12 @@ instance HasMemAddressStateDB ContextM where
     cxt <- get
     put $ cxt{contextAddressStateDBMap=theMap}
 
-           
+instance MonadBagger ContextM where
+    getBaggerState = contextBaggerState <$> get
+    putBaggerState s = do
+        ctx <- get
+        put $ ctx { contextBaggerState = s }
+
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
@@ -128,7 +136,8 @@ runContextM f = do
                    conn
                    Nothing
                    M.empty
-                   M.empty)
+                   M.empty
+                   defaultBaggerState)
 
   return ()
 
