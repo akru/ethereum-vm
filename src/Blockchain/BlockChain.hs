@@ -178,7 +178,7 @@ addTransactions isUnmined b blockGas (t:rest) = do
   afterMap <- getAddressStateDBMap
 
   unless isUnmined $
-    outputTransactionMessage b t result newAddrM deltaT beforeMap afterMap
+    outputTransactionResult b t result newAddrM deltaT beforeMap afterMap
 
   remainingBlockGas <- case result of
       Left e -> do
@@ -316,9 +316,9 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost _ = if isHomestead then gCREATETX else gTX
 
 --outputTransactionMessage::IO ()
-outputTransactionMessage :: OutputBlock->OutputTx->Either String (VMState, Integer)->Maybe Address->NominalDiffTime->
+outputTransactionResult :: OutputBlock->OutputTx->Either String (VMState, Integer)->Maybe Address->NominalDiffTime->
                             M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
-outputTransactionMessage b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result newAddrM deltaT beforeMap afterMap = do
+outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result newAddrM deltaT beforeMap afterMap = do
   let 
     (message, gasRemaining) =
       case result of 
