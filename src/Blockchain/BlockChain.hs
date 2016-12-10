@@ -23,6 +23,7 @@ import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
@@ -304,35 +305,10 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost t' | isMessageTX t' = gTX
       txCost _ = if isHomestead then gCREATETX else gTX
 
-
-printTransactionMessage::Bool->OutputTx->OutputBlock->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
-printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} b f = do
-  nonce <- fmap addressStateNonce $ getAddressState tAddr
-  let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
-  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
-  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
-  logInfoN $ T.pack $ CL.magenta "    |    " ++
-    (
-      if isMessageTX t
-      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
-      else "Create Contract "  ++ show (pretty $ fromJust newAddrM)
-    ) ++ CL.magenta " |"
-
-
-  --stateRootBefore <- fmap MP.stateRoot getStateDB
-
-  beforeMap <- getAddressStateDBMap
-
-  before <- liftIO $ getPOSIXTime 
-
-  result <- f
-
-  after <- liftIO $ getPOSIXTime 
-
-  afterMap <- getAddressStateDBMap
- 
-  --stateRootAfter <- fmap MP.stateRoot getStateDB
-      
+--outputTransactionMessage::IO ()
+outputTransactionMessage :: OutputBlock->OutputTx->Either String (VMState, Integer)->Maybe Address->NominalDiffTime->
+                            M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
+outputTransactionMessage b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result newAddrM deltaT beforeMap afterMap = do
   let 
     (message, gasRemaining) =
       case result of 
@@ -340,18 +316,8 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
         Right (state', _) -> ("Success!", vmGasRemaining state')
     gasUsed = fromInteger $ transactionGasLimit t - gasRemaining
     etherUsed = gasUsed * fromInteger (transactionGasLimit t)
-{-
-    txResult =
-      TXResult {
-        message,
-        response,
-        etherUsed,
-        time = realToFrac $ after - before
-        }
--}
-
-  unless isUnmined $
-    when flags_createTransactionResults $ do
+    
+  when flags_createTransactionResults $ do
       let beforeAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList beforeMap ]
           beforeDeletes = S.fromList [ x | (x, ASDeleted) <-  M.toList beforeMap ]
           afterAddresses = S.fromList [ x | (x, ASModification _) <-  M.toList afterMap ]
@@ -388,15 +354,57 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
                transactionResultContractsCreated=intercalate "," $ map formatAddress newAddresses,
                transactionResultContractsDeleted=intercalate "," $ map formatAddress $ S.toList $ (beforeAddresses S.\\ afterAddresses) `S.union` (afterDeletes S.\\ beforeDeletes),
                transactionResultStateDiff="", --BC.unpack $ BL.toStrict $ Aeson.encode addrDiff,
-               transactionResultTime=realToFrac $ after - before::Double,
+               transactionResultTime=realToFrac $ deltaT,
                transactionResultNewStorage="",
                transactionResultDeletedStorage=""
                } 
       return ()
 
+
+printTransactionMessage::Bool->OutputTx->OutputBlock->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
+printTransactionMessage isUnmined oTX@OutputTx{otBaseTx=t, otSigner=tAddr} b f = do
+  nonce <- fmap addressStateNonce $ getAddressState tAddr
+  let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
+  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
+  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  logInfoN $ T.pack $ CL.magenta "    |    " ++
+    (
+      if isMessageTX t
+      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
+      else "Create Contract "  ++ show (pretty $ fromJust newAddrM)
+    ) ++ CL.magenta " |"
+
+
+  --stateRootBefore <- fmap MP.stateRoot getStateDB
+
+  beforeMap <- getAddressStateDBMap
+
+  timeBefore <- liftIO $ getPOSIXTime 
+
+  result <- f
+
+  timeAfter <- liftIO $ getPOSIXTime 
+
+  afterMap <- getAddressStateDBMap
+ 
+  --stateRootAfter <- fmap MP.stateRoot getStateDB
+      
+{-
+    txResult =
+      TXResult {
+        message,
+        response,
+        etherUsed,
+        time = realToFrac $ after - before
+        }
+-}
+
+  unless isUnmined $
+    outputTransactionMessage b oTX result newAddrM (timeAfter - timeBefore) beforeMap afterMap
+
   --clearDebugMsg
 
-  logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
+  logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ timeAfter - timeBefore::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
   return result
