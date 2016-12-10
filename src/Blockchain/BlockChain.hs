@@ -31,7 +31,6 @@ import qualified Data.Aeson as Aeson
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Constants
-import Blockchain.SHA
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -84,7 +83,7 @@ addBlocks isUnmined blocks = do
                                    ++ (show . blockDataNumber . obBlockData . head $ blocks)
 
   let blocks' = filter ((/= 0) . blockDataNumber . obBlockData) blocks
-  txResults<- forM blocks' $ timeit "Block insertion" . addBlock isUnmined 
+  _ <- forM blocks' $ timeit "Block insertion" . addBlock isUnmined 
 
   logInfoN "done inserting, now will replace best if best is among the list"
 
@@ -335,7 +334,7 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
   --stateRootAfter <- fmap MP.stateRoot getStateDB
       
   let 
-    (message, response, gasRemaining, theTrace', theLogs) =
+    (message, _, gasRemaining, _, _) =
       case result of 
         Left err -> (err, "", 0, [], []) -- TODO Also include the trace
         Right (state', _) -> ("Success!", txResponse, vmGasRemaining state', vmTrace, logs state')
@@ -365,7 +364,7 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
-      let (resultString, response, theTrace', theLogs) =
+      let (_, response, theTrace', theLogs) =
             case result of 
               Left err -> (err, "", [], []) --TODO keep the trace when the run fails
               Right (state', _) -> 

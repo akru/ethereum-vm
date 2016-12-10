@@ -820,7 +820,8 @@ printTrace _ _ _15 _ op stateBefore stateAfter = do
   --GO style trace
   lift $ logInfoN $ T.pack $ "PC " ++ printf "%08d" (toInteger $ pc stateBefore) ++ ": " ++ formatOp op ++ " GAS: " ++ show (vmGasRemaining stateAfter) ++ " COST: " ++ show (vmGasRemaining stateBefore - vmGasRemaining stateAfter)
 
-  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  -- memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  _ <- liftIO $ getMemAsByteString (memory stateAfter)
   lift $ logInfoN "    STACK"
   lift $ logInfoN $ T.pack $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
 --  lift $ logInfoN $ T.pack $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)

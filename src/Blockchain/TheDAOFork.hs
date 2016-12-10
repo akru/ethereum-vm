@@ -10,6 +10,7 @@ import Blockchain.DB.HashDB
 import Blockchain.DB.StateDB
 
 
+addresses::[Address]
 addresses = map Address
   [  
     0xd4fe7bc31cedb7bfb8a345f31e668033056b2728,
