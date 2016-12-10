@@ -166,9 +166,19 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
 addTransactions::Bool->OutputBlock->Integer->[OutputTx]->ContextM ()
 addTransactions _ _ _ [] = return ()
 addTransactions isUnmined b blockGas (t:rest) = do
-  result <-
-    printTransactionMessage isUnmined t b $
+  nonce <- fmap addressStateNonce $ getAddressState (otSigner t)
+  let newAddrM = if isMessageTX (otBaseTx t) then Nothing else Just $ getNewAddress_unsafe (otSigner t) nonce
+      
+  beforeMap <- getAddressStateDBMap
+
+  (deltaT, result) <-
+    printTransactionMessage t newAddrM $
       runEitherT $ addTransaction False b blockGas t
+
+  afterMap <- getAddressStateDBMap
+
+  unless isUnmined $
+    outputTransactionMessage b t result newAddrM deltaT beforeMap afterMap
 
   remainingBlockGas <- case result of
       Left e -> do
@@ -361,10 +371,8 @@ outputTransactionMessage b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} r
       return ()
 
 
-printTransactionMessage::Bool->OutputTx->OutputBlock->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
-printTransactionMessage isUnmined oTX@OutputTx{otBaseTx=t, otSigner=tAddr} b f = do
-  nonce <- fmap addressStateNonce $ getAddressState tAddr
-  let newAddrM = if isMessageTX t then Nothing else Just $ getNewAddress_unsafe tAddr nonce
+printTransactionMessage::OutputTx->Maybe Address->ContextM a->ContextM (NominalDiffTime, a)
+printTransactionMessage OutputTx{otBaseTx=t, otSigner=tAddr} newAddrM f = do
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
   logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
   logInfoN $ T.pack $ CL.magenta "    |    " ++
@@ -374,40 +382,16 @@ printTransactionMessage isUnmined oTX@OutputTx{otBaseTx=t, otSigner=tAddr} b f =
       else "Create Contract "  ++ show (pretty $ fromJust newAddrM)
     ) ++ CL.magenta " |"
 
-
-  --stateRootBefore <- fmap MP.stateRoot getStateDB
-
-  beforeMap <- getAddressStateDBMap
-
   timeBefore <- liftIO $ getPOSIXTime 
 
   result <- f
 
   timeAfter <- liftIO $ getPOSIXTime 
 
-  afterMap <- getAddressStateDBMap
- 
-  --stateRootAfter <- fmap MP.stateRoot getStateDB
-      
-{-
-    txResult =
-      TXResult {
-        message,
-        response,
-        etherUsed,
-        time = realToFrac $ after - before
-        }
--}
-
-  unless isUnmined $
-    outputTransactionMessage b oTX result newAddrM (timeAfter - timeBefore) beforeMap afterMap
-
-  --clearDebugMsg
-
   logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ timeAfter - timeBefore::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
-  return result
+  return (timeAfter - timeBefore, result)
 
 
 indexMaybe::[a]->Int->Maybe a
