@@ -334,13 +334,10 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
   --stateRootAfter <- fmap MP.stateRoot getStateDB
       
   let 
-    (message, _, gasRemaining, _, _) =
+    (message, gasRemaining) =
       case result of 
-        Left err -> (err, "", 0, [], []) -- TODO Also include the trace
-        Right (state', _) -> ("Success!", txResponse, vmGasRemaining state', vmTrace, logs state')
-          where
-            vmTrace = unlines $ reverse $ theTrace state'
-            txResponse = BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state'
+        Left err -> (err, 0) -- TODO Also include the trace
+        Right (state', _) -> ("Success!", vmGasRemaining state')
     gasUsed = fromInteger $ transactionGasLimit t - gasRemaining
     etherUsed = gasUsed * fromInteger (transactionGasLimit t)
 {-
@@ -364,11 +361,11 @@ printTransactionMessage isUnmined OutputTx{otHash=txHash, otBaseTx=t, otSigner=t
       --mpdb <- getStateDB
       --addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
-      let (_, response, theTrace', theLogs) =
+      let (response, theTrace', theLogs) =
             case result of 
-              Left err -> (err, "", [], []) --TODO keep the trace when the run fails
+              Left _ -> ("", [], []) --TODO keep the trace when the run fails
               Right (state', _) -> 
-                (fromMaybe "Success!" $ fmap show $ vmException state', BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+                (BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
 
       let defaultNewAddrs = S.toList modified
           moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
