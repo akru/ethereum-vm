@@ -171,12 +171,11 @@ addTransactions isUnmined b blockGas (t:rest) = do
     printTransactionMessage isUnmined t b $
       runEitherT $ addTransaction False b blockGas t
 
-  (_, remainingBlockGas) <-
-    case result of
+  remainingBlockGas <- case result of
       Left e -> do
           logInfoN $ T.pack $ CL.red "Insertion of transaction failed!  " ++ e
-          return (S.empty, blockGas)
-      Right (resultState, g') -> return (suicideList resultState, g')
+          return blockGas
+      Right g' -> return $ snd g'
 
   txResultsRest <- addTransactions isUnmined b remainingBlockGas rest
   return $ (otHash t, txResult) : txResultsRest

@@ -18,7 +18,9 @@ import Network.Kafka
 import Network.Kafka.Protocol
                     
 import Blockchain.BlockChain
+import Blockchain.Data.BlockDB
 import Blockchain.Data.BlockSummary
+import Blockchain.Data.Transaction
 import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.SQLDB
 import Blockchain.EthConf
