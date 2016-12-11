@@ -39,6 +39,7 @@ import Blockchain.Data.BlockSummary
 import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
+import Blockchain.Data.ExecResults
 import Blockchain.Data.Extra
 import Blockchain.Data.Log
 import Blockchain.Data.LogDB
@@ -184,14 +185,14 @@ addTransactions isUnmined b blockGas (t:rest) = do
       Left e -> do
           logInfoN $ T.pack $ CL.red "Insertion of transaction failed!  " ++ e
           return blockGas
-      Right g' -> return $ snd g'
+      Right g' -> return $ erRemainingBlockGas g'
 
   addTransactions isUnmined b remainingBlockGas rest
 
 blockIsHomestead::OutputBlock->Bool
 blockIsHomestead OutputBlock{obBlockData=bd} = blockDataNumber bd >= gHomesteadFirstBlock
 
-addTransaction::Bool->OutputBlock->Integer->OutputTx->EitherT String ContextM (VMState, Integer)
+addTransaction::Bool->OutputBlock->Integer->OutputTx->EitherT String ContextM ExecResults
 addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=tAddr} = do
   nonceValid <- lift $ isNonceValid t
 
@@ -234,7 +235,14 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
         case result of
           Left e -> do
             when flags_debug $ lift $ logInfoN $ T.pack $ CL.red $ show e
-            return (newVMState'{vmException = Just e}, remainingBlockGas - transactionGasLimit bt)
+            return
+              ExecResults {
+                erRemainingBlockGas=remainingBlockGas - transactionGasLimit bt,
+                erReturnVal=returnVal newVMState',
+                erTrace=theTrace newVMState',
+                erLogs=logs newVMState'
+                }
+              -- (newVMState'{vmException = Just e}, 
           Right _ -> do
             let realRefund =
                   min (refund newVMState') ((transactionGasLimit bt - vmGasRemaining newVMState') `div` 2)
@@ -249,35 +257,25 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
               lift $ deleteAddressState address'
                          
         
-            return (newVMState', remainingBlockGas - (transactionGasLimit bt - realRefund - vmGasRemaining newVMState'))
+            return
+              ExecResults {
+                erRemainingBlockGas=remainingBlockGas - (transactionGasLimit bt - realRefund - vmGasRemaining newVMState'),
+                erReturnVal=returnVal newVMState',
+                erTrace=theTrace newVMState',
+                erLogs=logs newVMState'
+                }
       else do
         s1 <- lift $ addToBalance (blockDataCoinbase $ obBlockData b) (intrinsicGas' * transactionGasPrice bt)
         when (not s1) $ error "addToBalance failed even after a check in addTransaction"
         addressState' <- lift $ getAddressState tAddr
         lift $ logInfoN $ T.pack $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice bt) ++ ", have " ++ show (addressStateBalance addressState')
         return
-          (
-            VMState{
-               vmException=Just InsufficientFunds,
-               vmGasRemaining=0,
-               refund=0,
-               suicideList=S.empty,
-               logs=[],
-               returnVal=Nothing,
-               dbs=error "dbs not set",
-               pc=error "pc not set",
-               memory=error "memory not set",
-               stack=error "stack not set",
-               callDepth=error "callDepth not set",
-               done=error "done not set",
-               theTrace=error "theTrace not set",
-               environment=error "environment not set",
-               isRunningTests=isRunningTests',
-               vmIsHomestead=error "isHomestead is not set",
-               debugCallCreates=Nothing
-               },
-            remainingBlockGas
-          )
+          ExecResults{
+            erRemainingBlockGas=remainingBlockGas,
+            erReturnVal=Nothing,
+            erTrace=error "theTrace not set",
+            erLogs=[]
+            }
 
 runCodeForTransaction::Bool->Bool->OutputBlock->Integer->Address->Address->OutputTx->ContextM (Either VMException B.ByteString, VMState)
 runCodeForTransaction isRunningTests' isHomestead b availableGas tAddr newAddress OutputTx{otBaseTx=ut} | isContractCreationTX ut = do
@@ -316,14 +314,14 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost _ = if isHomestead then gCREATETX else gTX
 
 --outputTransactionMessage::IO ()
-outputTransactionResult :: OutputBlock->OutputTx->Either String (VMState, Integer)->Maybe Address->NominalDiffTime->
+outputTransactionResult :: OutputBlock->OutputTx->Either String ExecResults->Maybe Address->NominalDiffTime->
                             M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
 outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result newAddrM deltaT beforeMap afterMap = do
   let 
     (message, gasRemaining) =
       case result of 
         Left err -> (err, 0) -- TODO Also include the trace
-        Right (state', _) -> ("Success!", vmGasRemaining state')
+        Right r -> ("Success!", erRemainingBlockGas r)
     gasUsed = fromInteger $ transactionGasLimit t - gasRemaining
     etherUsed = gasUsed * fromInteger (transactionGasLimit t)
     
@@ -340,8 +338,8 @@ outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} re
       let (response, theTrace', theLogs) =
             case result of 
               Left _ -> ("", [], []) --TODO keep the trace when the run fails
-              Right (state', _) -> 
-                (BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state', unlines $ reverse $ theTrace state', logs state')
+              Right r -> 
+                (BC.unpack $ B16.encode $ fromMaybe "" $ erReturnVal r, unlines $ reverse $ erTrace r, erLogs r)
 
       let defaultNewAddrs = S.toList modified
           moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
