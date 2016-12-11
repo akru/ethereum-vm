@@ -167,25 +167,19 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
 addTransactions::Bool->OutputBlock->Integer->[OutputTx]->ContextM ()
 addTransactions _ _ _ [] = return ()
 addTransactions isUnmined b blockGas (t:rest) = do
-  nonce <- fmap addressStateNonce $ getAddressState (otSigner t)
-  let newAddrM = if isMessageTX (otBaseTx t) then Nothing else Just $ getNewAddress_unsafe (otSigner t) nonce
-      
   beforeMap <- getAddressStateDBMap
-
-  (deltaT, result) <-
-    printTransactionMessage t newAddrM $
-      runEitherT $ addTransaction False b blockGas t
-
+  (deltaT, result) <- timeIt $ runEitherT $ addTransaction False b blockGas t
   afterMap <- getAddressStateDBMap
+  
+  printTransactionMessage t result deltaT
 
   unless isUnmined $
-    outputTransactionResult b t result newAddrM deltaT beforeMap afterMap
+    outputTransactionResult b t result deltaT beforeMap afterMap
 
-  remainingBlockGas <- case result of
-      Left e -> do
-          logInfoN $ T.pack $ CL.red "Insertion of transaction failed!  " ++ e
-          return blockGas
-      Right g' -> return $ erRemainingBlockGas g'
+  let remainingBlockGas =
+        case result of
+         Left _ -> blockGas
+         Right execResult -> erRemainingBlockGas execResult
 
   addTransactions isUnmined b remainingBlockGas rest
 
@@ -240,7 +234,11 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
                 erRemainingBlockGas=remainingBlockGas - transactionGasLimit bt,
                 erReturnVal=returnVal newVMState',
                 erTrace=theTrace newVMState',
-                erLogs=logs newVMState'
+                erLogs=logs newVMState',
+                erNewContractAddress=
+                  if isContractCreationTX bt
+                  then Just theAddress
+                  else Nothing
                 }
               -- (newVMState'{vmException = Just e}, 
           Right _ -> do
@@ -262,7 +260,11 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
                 erRemainingBlockGas=remainingBlockGas - (transactionGasLimit bt - realRefund - vmGasRemaining newVMState'),
                 erReturnVal=returnVal newVMState',
                 erTrace=theTrace newVMState',
-                erLogs=logs newVMState'
+                erLogs=logs newVMState',
+                erNewContractAddress=
+                  if isContractCreationTX bt
+                  then Just theAddress
+                  else Nothing
                 }
       else do
         s1 <- lift $ addToBalance (blockDataCoinbase $ obBlockData b) (intrinsicGas' * transactionGasPrice bt)
@@ -274,7 +276,8 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
             erRemainingBlockGas=remainingBlockGas,
             erReturnVal=Nothing,
             erTrace=error "theTrace not set",
-            erLogs=[]
+            erLogs=[],
+            erNewContractAddress=Nothing
             }
 
 runCodeForTransaction::Bool->Bool->OutputBlock->Integer->Address->Address->OutputTx->ContextM (Either VMException B.ByteString, VMState)
@@ -314,9 +317,9 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost _ = if isHomestead then gCREATETX else gTX
 
 --outputTransactionMessage::IO ()
-outputTransactionResult :: OutputBlock->OutputTx->Either String ExecResults->Maybe Address->NominalDiffTime->
-                            M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
-outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result newAddrM deltaT beforeMap afterMap = do
+outputTransactionResult::OutputBlock->OutputTx->Either String ExecResults->NominalDiffTime->
+                         M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
+outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result deltaT beforeMap afterMap = do
   let 
     (message, gasRemaining) =
       case result of 
@@ -345,7 +348,10 @@ outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} re
           moveToFront (Just thisAddress) | thisAddress `S.member` modified = thisAddress : S.toList (S.delete thisAddress modified)
           moveToFront _ = defaultNewAddrs
 
-      newAddresses <- filterM (fmap not . NoCache.addressStateExists) $ moveToFront newAddrM
+      newAddresses <- 
+          case result of
+              Left _ -> return []
+              Right erResult -> filterM (fmap not . NoCache.addressStateExists) $ moveToFront $ erNewContractAddress erResult
 
       forM_ theLogs $ \log' -> do
         putLogDB $ LogDB txHash tAddr (topics log' `indexMaybe` 0) (topics log' `indexMaybe` 1) (topics log' `indexMaybe` 2) (topics log' `indexMaybe` 3) (logData log') (bloom log')
@@ -369,27 +375,40 @@ outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} re
       return ()
 
 
-printTransactionMessage::OutputTx->Maybe Address->ContextM a->ContextM (NominalDiffTime, a)
-printTransactionMessage OutputTx{otBaseTx=t, otSigner=tAddr} newAddrM f = do
-  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
-  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
-  logInfoN $ T.pack $ CL.magenta "    |    " ++
-    (
-      if isMessageTX t
-      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
-      else "Create Contract "  ++ show (pretty $ fromJust newAddrM)
-    ) ++ CL.magenta " |"
-
+timeIt::MonadIO m=>m a->m (NominalDiffTime, a)
+timeIt f = do
   timeBefore <- liftIO $ getPOSIXTime 
 
   result <- f
 
   timeAfter <- liftIO $ getPOSIXTime 
 
-  logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ timeAfter - timeBefore::Double) ++ "s                                                              " ++ CL.magenta "|"
+  return (timeAfter - timeBefore, result)
+
+
+printTransactionMessage::MonadLogger m=>
+                         OutputTx->Either String ExecResults->NominalDiffTime->m ()
+printTransactionMessage OutputTx{otSigner=tAddr} (Left errMsg) deltaT = do
+  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
+  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  logInfoN $ T.pack $ CL.magenta "    | " ++ CL.red "Transaction failure: " ++ CL.red errMsg ++ CL.magenta "         |"
+  logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ deltaT::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
-  return (timeAfter - timeBefore, result)
+printTransactionMessage OutputTx{otBaseTx=t, otSigner=tAddr} (Right results) deltaT = do
+  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
+  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  logInfoN $ T.pack $ CL.magenta "    |    " ++
+    (
+      if isMessageTX t
+      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
+      else "Create Contract "  ++ show (pretty $ fromJust $ erNewContractAddress results)
+    ) ++ CL.magenta " |"
+
+  logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ deltaT::Double) ++ "s                                                              " ++ CL.magenta "|"
+  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
+
+  return ()
 
 
 indexMaybe::[a]->Int->Maybe a

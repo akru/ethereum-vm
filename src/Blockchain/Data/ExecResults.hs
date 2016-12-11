@@ -5,6 +5,7 @@ module Blockchain.Data.ExecResults (
 
 import qualified Data.ByteString as B
 
+import Blockchain.Data.Address
 import Blockchain.Data.Log
 
 data ExecResults =
@@ -12,5 +13,6 @@ data ExecResults =
     erRemainingBlockGas::Integer,
     erReturnVal::Maybe B.ByteString,
     erTrace::[String],
-    erLogs::[Log]
+    erLogs::[Log],
+    erNewContractAddress::Maybe Address
     }
