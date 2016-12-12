@@ -317,8 +317,8 @@ runOperation EXTCODECOPY = do
 runOperation BLOCKHASH = do
   number' <- pop::VMM Word256
 
-  currentBlock <- getEnvVar envBlock
-  let currentBlockNumber = blockDataNumber . obBlockData $ currentBlock
+  currentBlock <- getEnvVar envBlockHeader
+  let currentBlockNumber = blockDataNumber currentBlock
 
   let inRange = not $ toInteger number' >= currentBlockNumber || 
                 toInteger number' < currentBlockNumber - 256
@@ -328,7 +328,7 @@ runOperation BLOCKHASH = do
   case (inRange, isRunningTests vmState) of
    (False, _) -> push (0::Word256)
    (True, False) -> do
-          maybeBlockHash <- getBlockHashWithNumber (fromIntegral number') $ outputBlockHash currentBlock
+          maybeBlockHash <- getBlockHashWithNumber (fromIntegral number') $ blockHeaderHash currentBlock
           case maybeBlockHash of
            Nothing -> push (0::Word256)
            Just theBlockHash -> push theBlockHash
@@ -336,16 +336,16 @@ runOperation BLOCKHASH = do
           let SHA h = hash $ BC.pack $ show $ toInteger number'
           push h
 
-runOperation COINBASE = pushEnvVar (blockDataCoinbase . obBlockData . envBlock)
+runOperation COINBASE = pushEnvVar (blockDataCoinbase . envBlockHeader)
 runOperation TIMESTAMP = do
   VMState{environment=env} <- lift get
-  push $ ((round . utcTimeToPOSIXSeconds . blockDataTimestamp . obBlockData . envBlock) env::Word256)
+  push $ ((round . utcTimeToPOSIXSeconds . blockDataTimestamp . envBlockHeader) env::Word256)
 
 
   
-runOperation NUMBER = pushEnvVar (blockDataNumber . obBlockData . envBlock)
-runOperation DIFFICULTY = pushEnvVar (blockDataDifficulty . obBlockData . envBlock)
-runOperation GASLIMIT = pushEnvVar (blockDataGasLimit . obBlockData . envBlock)
+runOperation NUMBER = pushEnvVar (blockDataNumber . envBlockHeader)
+runOperation DIFFICULTY = pushEnvVar (blockDataDifficulty . envBlockHeader)
+runOperation GASLIMIT = pushEnvVar (blockDataGasLimit .envBlockHeader)
 
 runOperation POP = do
   _ <- pop::VMM Word256
@@ -455,7 +455,7 @@ runOperation CREATE = do
   size <- pop
 
   owner <- getEnvVar envOwner
-  block <- getEnvVar envBlock
+  block <- getEnvVar envBlockHeader
 
   initCodeBytes <- unsafeSliceByteString input size
 
@@ -911,12 +911,12 @@ runVMM isRunningTests' isHomestead preExistingSuicideList callDepth' env availab
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
-create::Bool->Bool->S.Set Address->OutputBlock->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
+create::Bool->Bool->S.Set Address->BlockData->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
 create isRunningTests' isHomestead preExistingSuicideList b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
   let env =
         Environment{
           envGasPrice=gasPrice',
-          envBlock=b,
+          envBlockHeader=b,
           envOwner = newAddress,
           envOrigin = origin,
           envInputData = B.empty,
@@ -1005,7 +1005,7 @@ create' = do
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call::Bool->Bool->Bool->S.Set Address->OutputBlock->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
+call::Bool->Bool->Bool->S.Set Address->BlockData->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
 call isRunningTests' isHomestead noValueTransfer preExistingSuicideList b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- getAddressState $ Address codeAddress
@@ -1018,7 +1018,7 @@ call isRunningTests' isHomestead noValueTransfer preExistingSuicideList b callDe
   let env =
         Environment{
           envGasPrice=fromIntegral gasPrice',
-          envBlock=b,
+          envBlockHeader=b,
           envOwner = receiveAddress,
           envOrigin = origin,
           envInputData = theData,
@@ -1064,7 +1064,7 @@ call' noValueTransfer = do
 
 
 
-create_debugWrapper::OutputBlock->Address->Word256->B.ByteString->VMM (Maybe Address)
+create_debugWrapper::BlockData->Address->Word256->B.ByteString->VMM (Maybe Address)
 create_debugWrapper block owner value initCodeBytes = do
 
   addressState <- getAddressState owner
@@ -1133,7 +1133,7 @@ nestedRun_debugWrapper noValueTransfer gas receiveAddress (Address address') sen
   let runEm::ContextM a->VMM (a, Context)
       runEm f = lift $ lift $ flip runStateT dbs' f
       callEm::ContextM (Either VMException B.ByteString, VMState)
-      callEm = call (isRunningTests currentVMState) (vmIsHomestead currentVMState) noValueTransfer (suicideList currentVMState) (envBlock env) (currentCallDepth+1) receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
+      callEm = call (isRunningTests currentVMState) (vmIsHomestead currentVMState) noValueTransfer (suicideList currentVMState) (envBlockHeader env) (currentCallDepth+1) receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
 
 
   ((result, finalVMState), finalDBs) <- 

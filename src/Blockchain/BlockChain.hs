@@ -130,7 +130,7 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
           ((rewardBase flags_testnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
     when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
-  addTransactions isUnmined b (blockDataGasLimit $ obBlockData b) transactions
+  addTransactions isUnmined bd (blockDataGasLimit $ obBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
@@ -155,7 +155,7 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ obBlockData b)
       return b
 
-  valid <- checkValidity isUnmined (blockIsHomestead b) bSum b'
+  valid <- checkValidity isUnmined (blockIsHomestead bd) bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err
@@ -164,7 +164,7 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
 
   return ()
 
-addTransactions::Bool->OutputBlock->Integer->[OutputTx]->ContextM ()
+addTransactions::Bool->BlockData->Integer->[OutputTx]->ContextM ()
 addTransactions _ _ _ [] = return ()
 addTransactions isUnmined b blockGas (t:rest) = do
   beforeMap <- getAddressStateDBMap
@@ -183,10 +183,10 @@ addTransactions isUnmined b blockGas (t:rest) = do
 
   addTransactions isUnmined b remainingBlockGas rest
 
-blockIsHomestead::OutputBlock->Bool
-blockIsHomestead OutputBlock{obBlockData=bd} = blockDataNumber bd >= gHomesteadFirstBlock
+blockIsHomestead::BlockData->Bool
+blockIsHomestead bd = blockDataNumber bd >= gHomesteadFirstBlock
 
-addTransaction::Bool->OutputBlock->Integer->OutputTx->EitherT String ContextM ExecResults
+addTransaction::Bool->BlockData->Integer->OutputTx->EitherT String ContextM ExecResults
 addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=tAddr} = do
   nonceValid <- lift $ isNonceValid t
 
@@ -223,7 +223,7 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
       then do
         (result, newVMState') <- lift $ runCodeForTransaction isRunningTests' isHomestead b (transactionGasLimit bt - intrinsicGas') tAddr theAddress t
 
-        s1 <- lift $ addToBalance (blockDataCoinbase $ obBlockData b) (transactionGasLimit bt * transactionGasPrice bt)
+        s1 <- lift $ addToBalance (blockDataCoinbase b) (transactionGasLimit bt * transactionGasPrice bt)
         when (not s1) $ error "addToBalance failed even after a check in addBlock"
         
         case result of
@@ -245,7 +245,7 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
             let realRefund =
                   min (refund newVMState') ((transactionGasLimit bt - vmGasRemaining newVMState') `div` 2)
 
-            success' <- lift $ pay "VM refund fees" (blockDataCoinbase $ obBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * transactionGasPrice bt)
+            success' <- lift $ pay "VM refund fees" (blockDataCoinbase b) tAddr ((realRefund + vmGasRemaining newVMState') * transactionGasPrice bt)
 
             when (not success') $ error "oops, refund was too much"
 
@@ -267,7 +267,7 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
                   else Nothing
                 }
       else do
-        s1 <- lift $ addToBalance (blockDataCoinbase $ obBlockData b) (intrinsicGas' * transactionGasPrice bt)
+        s1 <- lift $ addToBalance (blockDataCoinbase b) (intrinsicGas' * transactionGasPrice bt)
         when (not s1) $ error "addToBalance failed even after a check in addTransaction"
         addressState' <- lift $ getAddressState tAddr
         lift $ logInfoN $ T.pack $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice bt) ++ ", have " ++ show (addressStateBalance addressState')
@@ -280,7 +280,7 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
             erNewContractAddress=Nothing
             }
 
-runCodeForTransaction::Bool->Bool->OutputBlock->Integer->Address->Address->OutputTx->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction::Bool->Bool->BlockData->Integer->Address->Address->OutputTx->ContextM (Either VMException B.ByteString, VMState)
 runCodeForTransaction isRunningTests' isHomestead b availableGas tAddr newAddress OutputTx{otBaseTx=ut} | isContractCreationTX ut = do
   when flags_debug $ logInfoN "runCodeForTransaction: ContractCreationTX"
 
@@ -317,7 +317,7 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost _ = if isHomestead then gCREATETX else gTX
 
 --outputTransactionMessage::IO ()
-outputTransactionResult::OutputBlock->OutputTx->Either String ExecResults->NominalDiffTime->
+outputTransactionResult::BlockData->OutputTx->Either String ExecResults->NominalDiffTime->
                          M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
 outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result deltaT beforeMap afterMap = do
   let 
@@ -358,7 +358,7 @@ outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} re
                                    
       _ <- putTransactionResult $
              TransactionResult {
-               transactionResultBlockHash=outputBlockHash b,
+               transactionResultBlockHash=blockHeaderHash b,
                transactionResultTransactionHash=txHash,
                transactionResultMessage=message,
                transactionResultResponse=response,
