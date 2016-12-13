@@ -1,11 +1,12 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, FlexibleInstances, TypeSynonymInstances, NamedFieldPuns #-}
 
 module Blockchain.BlockChain (
   addBlock,
   addBlocks,
   addTransaction,
   addTransactions,
-  runCodeForTransaction
+  runCodeForTransaction,
+  calculateIntrinsicGas'
   ) where
 
 import Control.Monad
@@ -67,7 +68,42 @@ import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
+import qualified Control.Monad.State as State
+import qualified Blockchain.Bagger as Bagger
+
 --import Debug.Trace
+
+-- has to be here unfortunately, or else BlockChain.hs puts a circular dependency on VMContext.hs
+
+instance Bagger.MonadBagger ContextM where
+    getBaggerState = contextBaggerState <$> State.get
+    putBaggerState s = do
+        ctx <- State.get
+        State.put $ ctx { contextBaggerState = s }
+
+    runFromStateRoot sr blockHeader remainingGas txs = do
+        startingStateRoot <- getStateRoot
+        setStateDBStateRoot sr
+        ret <- do
+            remGas <- addTransactions True remainingGas blockHeader txs
+            flushMemStorageDB
+            flushMemAddressStateDB
+            newStateRoot <- getStateRoot
+            return $ Right (remGas, newStateRoot)
+        setStateDBStateRoot startingStateRoot
+        return ret
+
+    rewardCoinbases sr us uncles = do
+        startingStateRoot <- getStateRoot
+        setStateDBStateRoot sr
+        addToBalance us $ rewardBase flags_testnet
+        -- todo dont be a ~rude individual~ and actually reward uncles
+        --forM_ uncles $ \uncleCB -> addToBalance us $ rewardBase flags_testnet
+        flushMemStorageDB
+        flushMemAddressStateDB
+        newStateRoot <- getStateRoot
+        setStateDBStateRoot startingStateRoot
+        return newStateRoot
 
 timeit::(MonadIO m, MonadLogger m)=>String->m a->m a
 timeit message f = do
@@ -130,7 +166,7 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
           ((rewardBase flags_testnet * (8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
     when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
-  addTransactions isUnmined bd (blockDataGasLimit $ obBlockData b) transactions
+  _ <- addTransactions isUnmined bd (blockDataGasLimit $ obBlockData b) transactions
 
       --when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> S.toList fullSuicideList)
       --forM_ (S.toList fullSuicideList) deleteAddressState
@@ -155,7 +191,7 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ format (blockDataStateRoot $ obBlockData b)
       return b
 
-  valid <- checkValidity isUnmined (blockIsHomestead bd) bSum b'
+  valid <- checkValidity isUnmined (blockIsHomestead $ blockDataNumber bd) bSum b'
   case valid of
     Right () -> return ()
     Left err -> error err
@@ -164,8 +200,8 @@ addBlock isUnmined b@OutputBlock{obBlockData=bd, obReceiptTransactions = transac
 
   return ()
 
-addTransactions::Bool->BlockData->Integer->[OutputTx]->ContextM ()
-addTransactions _ _ _ [] = return ()
+addTransactions::Bool->BlockData->Integer->[OutputTx]->ContextM Integer
+addTransactions _ _ remGas [] = return remGas
 addTransactions isUnmined b blockGas (t:rest) = do
   beforeMap <- getAddressStateDBMap
   (deltaT, result) <- timeIt $ runEitherT $ addTransaction False b blockGas t
@@ -183,14 +219,14 @@ addTransactions isUnmined b blockGas (t:rest) = do
 
   addTransactions isUnmined b remainingBlockGas rest
 
-blockIsHomestead::BlockData->Bool
-blockIsHomestead bd = blockDataNumber bd >= gHomesteadFirstBlock
+blockIsHomestead::Integer->Bool
+blockIsHomestead blockNum = blockNum >= gHomesteadFirstBlock
 
 addTransaction::Bool->BlockData->Integer->OutputTx->EitherT String ContextM ExecResults
 addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=tAddr} = do
   nonceValid <- lift $ isNonceValid t
 
-  let isHomestead = blockIsHomestead b
+  let isHomestead = blockIsHomestead $ blockDataNumber b
       intrinsicGas' = intrinsicGas isHomestead t
 
   when flags_debug $
@@ -309,6 +345,9 @@ zeroBytesLength OutputTx{otBaseTx=bt} = length $ filter (==0) $ B.unpack codeByt
                   where
                     Code codeBytes' = transactionInit bt
 
+calculateIntrinsicGas' :: Integer -> OutputTx -> Integer
+calculateIntrinsicGas' blockNum = intrinsicGas (blockIsHomestead blockNum)
+
 intrinsicGas :: Bool -> OutputTx -> Integer
 intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + (txCost bt)
     where
@@ -425,17 +464,18 @@ formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
 ----------------
 
 replaceBestIfBetter::OutputBlock->ContextM ()
-replaceBestIfBetter b = do
+replaceBestIfBetter b@OutputBlock{obBlockData = bd} = do
   (_, oldBestBlock) <- getBestBlockInfo
 
-  let newNumber = blockDataNumber $ obBlockData b
-      newStateRoot = blockDataStateRoot $ obBlockData b
+  let newNumber    = blockDataNumber bd
+      newStateRoot = blockDataStateRoot bd
       oldStateRoot = blockDataStateRoot oldBestBlock
+      bH           = outputBlockHash b
 
   logInfoN $ T.pack $ "newNumber = " ++ show newNumber ++ ", oldBestNumber = " ++ show (blockDataNumber oldBestBlock)
 
   when (newNumber > blockDataNumber oldBestBlock || newNumber == 0) $ do
-    let bH = outputBlockHash b
+    Bagger.processNewBestBlock bH bd
     diffs <- stateDiff newNumber bH oldStateRoot newStateRoot
 
     when flags_sqlDiff $ do

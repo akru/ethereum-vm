@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 
 module Executable.EthereumVM (
   ethereumVM
@@ -8,6 +8,7 @@ import Control.Lens hiding (Context)
 import Control.Monad
 import Control.Monad.Logger
 import Control.Monad.IO.Class
+import qualified Control.Monad.State as State
 import Data.IORef
 import Data.Maybe
 import qualified Data.Map as M
@@ -23,49 +24,53 @@ import Blockchain.Data.BlockSummary
 import Blockchain.Data.Transaction
 import Blockchain.DB.BlockSummaryDB
 import Blockchain.DB.SQLDB
+import Blockchain.DB.MemAddressStateDB (flushMemAddressStateDB)
+import Blockchain.DB.StorageDB (flushMemStorageDB)
+import Blockchain.DB.StateDB (getStateRoot, setStateDBStateRoot)
 import Blockchain.EthConf
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Sequencer.Event
 import Blockchain.Sequencer.Kafka
 import Blockchain.Stream.VMEvent
+import Blockchain.Stream.UnminedBlock (produceUnminedBlocks)
 import Blockchain.Quarry
+
+import qualified Blockchain.Bagger as Bagger
 
 ethereumVM::LoggingT IO ()
 ethereumVM = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
   runContextM $ do
-    addFirstBlockToBSumSequencer
-    forever $ do
-      logInfoN "Getting Blocks/Txs"
-      seqEvents <- getUnprocessedKafkaEvents offsetIORef
+        Bagger.setCalculateIntrinsicGas calculateIntrinsicGas'
+        firstBlock <- getFirstBlockFromSequencer
+        let firstBlockSHA  = outputBlockHash firstBlock
+            firstBlockHead = obBlockData firstBlock
+        putBSum firstBlockSHA (blockHeaderToBSum firstBlockHead)
+        Bagger.processNewBestBlock firstBlockSHA firstBlockHead -- bootstrap Bagger with genesis block
+        forever $ do
+            logInfoN "Getting Blocks/Txs"
+            seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
-      let blocks = [b | OEBlock b <- seqEvents]
-      forM_ blocks $ \b -> putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
-      addBlocks False blocks
+            let newTXs = [t | OETx t <- seqEvents]
+            unless (null newTXs) $ logInfoN (T.pack ("adding " ++ (show $ length newTXs) ++ " txs to mempool")) >> Bagger.addTransactionsToMempool newTXs
 
-      let newTXs = [t | OETx t <- seqEvents]
-      unless (null newTXs) $ do
-        pool <- getSQLDB
-        maybeBlock <- SQL.runSqlPool makeNewBlock pool
+            let blocks = [b | OEBlock b <- seqEvents]
+            forM_ blocks $ \b -> putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
+            addBlocks False blocks
 
-        case maybeBlock of
-         Just quarryBlock -> do
-           let block = quarryBlockToOutputBlock quarryBlock
-           logInfoN $ "inserting a block from the unmined block list"
-           addBlocks True [block]
-         Nothing -> do
-           logInfoN $ "returning without inserting any unmined blocks"
-           return ()
+            unless (null newTXs) $ do
+                logInfoN "makeNewBlock !!"
+                newBlock <- Bagger.makeNewBlock
+                produceUnminedBlocks [(outputBlockToBlock newBlock)]
 
-  return ()
+            return ()
 
-addFirstBlockToBSumSequencer :: (MonadLogger m, HasBlockSummaryDB m) => m ()
-addFirstBlockToBSumSequencer = do
+getFirstBlockFromSequencer :: (MonadLogger m, HasBlockSummaryDB m) => m OutputBlock
+getFirstBlockFromSequencer = do
     dummyIORef      <- liftIO $ newIORef (0 :: Integer)
     (OEBlock block) <- head <$> getUnprocessedKafkaEvents dummyIORef
-    putBSum (outputBlockHash block) (blockHeaderToBSum $ obBlockData block)
-    return ()
+    return block
 
 getUnprocessedKafkaEvents::(MonadIO m, MonadLogger m)=>
                            IORef Integer->m [OutputEvent]

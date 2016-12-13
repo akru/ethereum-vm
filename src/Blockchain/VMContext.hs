@@ -77,14 +77,6 @@ instance HasMemAddressStateDB ContextM where
     cxt <- get
     put $ cxt{contextAddressStateDBMap=theMap}
 
-instance MonadBagger ContextM where
-    getBaggerState = contextBaggerState <$> get
-    putBaggerState s = do
-        ctx <- get
-        put $ ctx { contextBaggerState = s }
-
-    runFromStateRoot sr txs = undefined
-
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
