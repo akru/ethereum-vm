@@ -83,6 +83,8 @@ instance MonadBagger ContextM where
         ctx <- get
         put $ ctx { contextBaggerState = s }
 
+    runFromStateRoot sr txs = undefined
+
 instance HasStorageDB ContextM where
   getStorageDB = do
     cxt <- get
