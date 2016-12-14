@@ -427,16 +427,18 @@ timeIt f = do
 
 printTransactionMessage::MonadLogger m=>
                          OutputTx->Either String ExecResults->NominalDiffTime->m ()
-printTransactionMessage OutputTx{otSigner=tAddr} (Left errMsg) deltaT = do
-  logInfoN $ T.pack $ CL.magenta "    =========================================================================="
-  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+printTransactionMessage OutputTx{otSigner=tAddr, otBaseTx=baseTx} (Left errMsg) deltaT = do
+  let tNonce = transactionNonce baseTx
+  logInfoN $ T.pack $ CL.magenta "    ============================================================================="
+  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " //  " ++ (show tNonce) ++" |"
   logInfoN $ T.pack $ CL.magenta "    | " ++ CL.red "Transaction failure: " ++ CL.red errMsg ++ CL.magenta "         |"
   logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ deltaT::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
 printTransactionMessage OutputTx{otBaseTx=t, otSigner=tAddr} (Right results) deltaT = do
+  let tNonce = transactionNonce t
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
-  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " //  " ++ (show tNonce) ++" |"
   logInfoN $ T.pack $ CL.magenta "    |    " ++
     (
       if isMessageTX t
