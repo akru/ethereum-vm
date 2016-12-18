@@ -74,6 +74,7 @@ library
                      Executable.EthereumVM  
     other-modules:
                   Blockchain.DB.ModifyStateDB
+                  Blockchain.JsonRpcCommand
                   Blockchain.VM.Memory
                   Blockchain.VM.OpcodePrices
                   Blockchain.VM.PrecompiledContracts

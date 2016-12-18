@@ -28,6 +28,7 @@ import Blockchain.DB.MemAddressStateDB (flushMemAddressStateDB)
 import Blockchain.DB.StorageDB (flushMemStorageDB)
 import Blockchain.DB.StateDB (getStateRoot, setStateDBStateRoot)
 import Blockchain.EthConf
+import Blockchain.JsonRpcCommand
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Sequencer.Event
@@ -52,6 +53,9 @@ ethereumVM = do
             logInfoN "Getting Blocks/Txs"
             seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
+            let newCommands = [(command, theData) | OEJsonRpcCommand command theData <- seqEvents]
+            liftIO $ forM_ newCommands $ uncurry runJsonRpcCommand 
+            
             let newTXs = [t | OETx t <- seqEvents]
             unless (null newTXs) $ logInfoN (T.pack ("adding " ++ (show $ length newTXs) ++ " txs to mempool")) >> Bagger.addTransactionsToMempool newTXs
 
