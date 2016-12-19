@@ -39,8 +39,8 @@ produceResponse id theData = do
 
 
 runJsonRpcCommand::(MonadLogger m, HasStateDB m, HasHashDB m, HasSQLDB m)=>
-                   String->B.ByteString->String->m ()
-runJsonRpcCommand command theData id = do
+                   String->B.ByteString->String->String->m ()
+runJsonRpcCommand command theData blockString id = do
   liftIO $ putStrLn $ "running command: " ++ command ++ ": " ++ BC.unpack (B16.encode theData)
   bestBlock <- getBestBlock
   setStateDBStateRoot $ blockDataStateRoot $ blockBlockData bestBlock

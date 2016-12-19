@@ -53,8 +53,8 @@ ethereumVM = do
             logInfoN "Getting Blocks/Txs"
             seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
-            let newCommands = [(command, theData, id) | OEJsonRpcCommand command theData id <- seqEvents]
-            forM_ newCommands $ \(c, d, i) -> runJsonRpcCommand c d i
+            let newCommands = [(command, theData, blockString, id) | OEJsonRpcCommand command theData blockString id <- seqEvents]
+            forM_ newCommands $ \(c, d, b, i) -> runJsonRpcCommand c d b i
             
             let newTXs = [t | OETx t <- seqEvents]
             unless (null newTXs) $ logInfoN (T.pack ("adding " ++ (show $ length newTXs) ++ " txs to mempool")) >> Bagger.addTransactionsToMempool newTXs
