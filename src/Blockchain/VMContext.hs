@@ -1,9 +1,11 @@
-{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances, BangPatterns #-}
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, BangPatterns #-}
 
 module Blockchain.VMContext (
   Context(..),
   ContextM,
   runContextM,
+  runContextM',
+  evalContextM,
 --  getDebugMsg,
 --  clearDebugMsg,
   getCachedBestProcessedBlock,
@@ -105,11 +107,13 @@ connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=
 
 --runContextM::MonadIO m=>
 --             ContextM a->m ()
-runContextM::ContextM a->LoggingT IO ()
-runContextM f = do
+
+runContextM' :: (MonadIO m, MonadBaseControl IO m, MonadThrow m) =>
+                StateT Context (ResourceT m) a -> m (a, Context)
+runContextM' f = do
   liftIO $ createDirectoryIfMissing False $ dbDir "h"
 
-  _ <-
+  r <-
     runResourceT $ do
       sdb <- DB.open (dbDir "h" ++ stateDBPath)
              DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
@@ -133,7 +137,14 @@ runContextM f = do
                    M.empty
                    defaultBaggerState)
 
+  return r
+
+runContextM::ContextM a->LoggingT IO ()
+runContextM f = do
+  _ <- runContextM' f
   return ()
+
+evalContextM = runContextM
 
 {-
 getDebugMsg::ContextM String
