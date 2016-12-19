@@ -71,27 +71,36 @@ import Blockchain.VM.VMState
 import qualified Control.Monad.State as State
 import qualified Blockchain.Bagger as Bagger
 
---import Debug.Trace
+data TransactionFailureCause = TFInsufficientFunds Integer Integer -- txCost, accountBalance
+                             | TFIntrinsicGasExceedsTxLimit Integer Integer -- intrinsicGas, txGasLimit
+                             | TFBlockGasLimitExceeded Integer Integer -- neededGas, actualGas
+                             | TFNonceMismatch Integer Integer  -- expectedNonce, actualNonce
+
+instance Show TransactionFailureCause where
+    show (TFInsufficientFunds cost bal) = "Insufficient funds: cost " ++ show cost ++ " > balance " ++ show bal
+    show (TFIntrinsicGasExceedsTxLimit intG txGL) = "Intrinsic gas exceeds TX gas limit: intrinsic gas " ++ show intG ++ " > tx gas limit " ++ show txGL
+    show (TFBlockGasLimitExceeded txG blkG) = "Block gas limit exceeded: needed " ++ show txG ++ " > available " ++ show blkG
+    show (TFNonceMismatch expected actual) = "Nonce mismatch: expecting " ++ show expected ++ ", actual " ++ show actual
 
 -- has to be here unfortunately, or else BlockChain.hs puts a circular dependency on VMContext.hs
-
 instance Bagger.MonadBagger ContextM where
     getBaggerState = contextBaggerState <$> State.get
     putBaggerState s = do
         ctx <- State.get
         State.put $ ctx { contextBaggerState = s }
 
-    runFromStateRoot sr blockHeader remainingGas txs = do
+    runFromStateRoot sr remainingGas blockHeader txs = do
         startingStateRoot <- getStateRoot
         setStateDBStateRoot sr
-        ret <- do
-            remGas <- addTransactions True remainingGas blockHeader txs
-            flushMemStorageDB
-            flushMemAddressStateDB
-            newStateRoot <- getStateRoot
-            return $ Right (remGas, newStateRoot)
+        (res, ranTxs, unranTxs, newGas) <- mineTransactions' blockHeader remainingGas [] txs
+        flushMemStorageDB
+        flushMemAddressStateDB
+        newStateRoot <- getStateRoot
         setStateDBStateRoot startingStateRoot
-        return ret
+        case res of -- currently only get GasLimit errors out of mineTransactions'
+            Left (TFBlockGasLimitExceeded _ _) -> return $ Left (Bagger.GasLimitReached ranTxs unranTxs newStateRoot newGas)
+            Left err -> error $ "mineTransactions' failed unexpectedly: " ++ show err
+            Right _ -> return $ Right (newStateRoot, newGas)
 
     rewardCoinbases sr us uncles = do
         startingStateRoot <- getStateRoot
@@ -219,10 +228,20 @@ addTransactions isUnmined b blockGas (t:rest) = do
 
   addTransactions isUnmined b remainingBlockGas rest
 
+mineTransactions' :: BlockData -> Integer -> [OutputTx] -> [OutputTx] -> ContextM (Either TransactionFailureCause (), [OutputTx], [OutputTx], Integer)
+mineTransactions' _ remGas ran [] = return $ (Right (), reverse ran, [], remGas)
+mineTransactions' header remGas ran unran@(tx:txs) = do
+    (time, result) <- timeIt . runEitherT $ addTransaction False header remGas tx
+    printTransactionMessage tx result time
+    case result of
+        Left f@(TFBlockGasLimitExceeded need have) -> return $ (Left f, reverse ran, unran, have)
+        Left other       -> error $ "mineTransactions' unexpected failure: " ++ show other
+        Right execResult -> mineTransactions' header (erRemainingBlockGas execResult) (tx:ran) txs
+
 blockIsHomestead::Integer->Bool
 blockIsHomestead blockNum = blockNum >= gHomesteadFirstBlock
 
-addTransaction::Bool->BlockData->Integer->OutputTx->EitherT String ContextM ExecResults
+addTransaction::Bool->BlockData->Integer->OutputTx->EitherT TransactionFailureCause ContextM ExecResults
 addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSigner=tAddr} = do
   nonceValid <- lift $ isNonceValid t
 
@@ -237,10 +256,12 @@ addTransaction isRunningTests' b remainingBlockGas t@OutputTx{otBaseTx=bt,otSign
 
   addressState <- lift $ getAddressState tAddr
 
-  when (transactionGasLimit bt * transactionGasPrice bt + transactionValue bt > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
-  when (intrinsicGas' > transactionGasLimit bt) $ left "intrinsic gas higher than transaction gas limit"
-  when (transactionGasLimit bt > remainingBlockGas) $ left "block gas has run out"
-  when (not nonceValid) $ left $ "nonce incorrect, got " ++ show (transactionNonce bt) ++ ", expected " ++ show (addressStateNonce addressState)
+  let txCost      = transactionGasLimit bt * transactionGasPrice bt + transactionValue bt
+      acctBalance = addressStateBalance addressState
+  when (txCost > acctBalance) $ left $ TFInsufficientFunds txCost acctBalance
+  when (intrinsicGas' > transactionGasLimit bt) $ left $ TFIntrinsicGasExceedsTxLimit intrinsicGas' (transactionGasLimit bt)
+  when (transactionGasLimit bt > remainingBlockGas) $ left $ TFBlockGasLimitExceeded (transactionGasLimit bt) remainingBlockGas
+  when (not nonceValid) $ left $ TFNonceMismatch (transactionNonce bt) (addressStateNonce addressState)
 
   let availableGas = transactionGasLimit bt - intrinsicGas'
 
@@ -356,13 +377,13 @@ intrinsicGas isHomestead t@OutputTx{otBaseTx=bt} = gTXDATAZERO * zeroLen + gTXDA
       txCost _ = if isHomestead then gCREATETX else gTX
 
 --outputTransactionMessage::IO ()
-outputTransactionResult::BlockData->OutputTx->Either String ExecResults->NominalDiffTime->
+outputTransactionResult::BlockData->OutputTx->Either TransactionFailureCause ExecResults->NominalDiffTime->
                          M.Map Address AddressStateModification->M.Map Address AddressStateModification->ContextM ()
 outputTransactionResult b OutputTx{otHash=txHash, otBaseTx=t, otSigner=tAddr} result deltaT beforeMap afterMap = do
   let 
     (message, gasRemaining) =
       case result of 
-        Left err -> (err, 0) -- TODO Also include the trace
+        Left err -> (show err, 0) -- TODO Also include the trace
         Right r -> ("Success!", erRemainingBlockGas r)
     gasUsed = fromInteger $ transactionGasLimit t - gasRemaining
     etherUsed = gasUsed * fromInteger (transactionGasLimit t)
@@ -426,12 +447,12 @@ timeIt f = do
 
 
 printTransactionMessage::MonadLogger m=>
-                         OutputTx->Either String ExecResults->NominalDiffTime->m ()
+                         OutputTx->Either TransactionFailureCause ExecResults->NominalDiffTime->m ()
 printTransactionMessage OutputTx{otSigner=tAddr, otBaseTx=baseTx} (Left errMsg) deltaT = do
   let tNonce = transactionNonce baseTx
   logInfoN $ T.pack $ CL.magenta "    ============================================================================="
   logInfoN $ T.pack $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " //  " ++ (show tNonce) ++" |"
-  logInfoN $ T.pack $ CL.magenta "    | " ++ CL.red "Transaction failure: " ++ CL.red errMsg ++ CL.magenta "         |"
+  logInfoN $ T.pack $ CL.magenta "    | " ++ CL.red "Transaction failure: " ++ CL.red (show errMsg) ++ CL.magenta "         |"
   logInfoN $ T.pack $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ deltaT::Double) ++ "s                                                              " ++ CL.magenta "|"
   logInfoN $ T.pack $ CL.magenta "    =========================================================================="
 
@@ -486,6 +507,6 @@ replaceBestIfBetter b@OutputBlock{obBlockData = bd} = do
 
     when flags_diffPublish $ do
       let diffBS = BL.toStrict $ Aeson.encode diffs
-      logInfoN $ T.decodeUtf8 diffBS
+      --logInfoN $ T.decodeUtf8 diffBS
       produceBytes "statediff" [diffBS]
 
