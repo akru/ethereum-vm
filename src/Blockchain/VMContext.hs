@@ -4,7 +4,6 @@ module Blockchain.VMContext (
   Context(..),
   ContextM,
   runContextM,
-  runContextM',
   evalContextM,
 --  getDebugMsg,
 --  clearDebugMsg,
@@ -108,9 +107,9 @@ connStr' = BC.pack $ "host=localhost dbname=eth user=postgres password=api port=
 --runContextM::MonadIO m=>
 --             ContextM a->m ()
 
-runContextM' :: (MonadIO m, MonadBaseControl IO m, MonadThrow m) =>
+runContextM :: (MonadIO m, MonadBaseControl IO m, MonadThrow m) =>
                 StateT Context (ResourceT m) a -> m (a, Context)
-runContextM' f = do
+runContextM f = do
   liftIO $ createDirectoryIfMissing False $ dbDir "h"
 
   r <-
@@ -139,12 +138,11 @@ runContextM' f = do
 
   return r
 
-runContextM::ContextM a->LoggingT IO ()
-runContextM f = do
-  _ <- runContextM' f
+evalContextM::ContextM a->LoggingT IO ()
+evalContextM f = do
+  _ <- runContextM f
   return ()
 
-evalContextM = runContextM
 
 {-
 getDebugMsg::ContextM String
