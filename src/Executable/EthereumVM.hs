@@ -54,7 +54,7 @@ ethereumVM = do
             seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
             let newCommands = [(command, theData) | OEJsonRpcCommand command theData <- seqEvents]
-            liftIO $ forM_ newCommands $ uncurry runJsonRpcCommand 
+            forM_ newCommands $ uncurry runJsonRpcCommand 
             
             let newTXs = [t | OETx t <- seqEvents]
             unless (null newTXs) $ logInfoN (T.pack ("adding " ++ (show $ length newTXs) ++ " txs to mempool")) >> Bagger.addTransactionsToMempool newTXs
