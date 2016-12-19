@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances, BangPatterns #-}
 
 module Blockchain.VMContext (
   Context(..),
@@ -56,7 +56,7 @@ data Context =
     cachedBestProcessedBlock::Maybe Block,
     contextAddressStateDBMap::M.Map Address AddressStateModification,
     contextStorageMap::M.Map (Address, Word256) Word256,
-    contextBaggerState :: BaggerState
+    contextBaggerState :: !BaggerState
     }
 
 type ContextM = StateT Context (ResourceT (LoggingT IO))
