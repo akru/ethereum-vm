@@ -5,6 +5,7 @@ module Blockchain.VMContext (
   ContextM,
   runContextM,
   evalContextM,
+  execContextM,
 --  getDebugMsg,
 --  clearDebugMsg,
   getCachedBestProcessedBlock,
@@ -138,11 +139,13 @@ runContextM f = do
 
   return r
 
-evalContextM::ContextM a->LoggingT IO ()
-evalContextM f = do
-  _ <- runContextM f
-  return ()
+evalContextM :: (MonadIO m, MonadBaseControl IO m, MonadThrow m) =>
+                 StateT Context (ResourceT m) a -> m (a)
+evalContextM f = fst <$> (runContextM f) 
 
+execContextM :: (MonadIO m, MonadBaseControl IO m, MonadThrow m) =>
+                 StateT Context (ResourceT m) a -> m (Context)
+execContextM f = snd <$> (runContextM f)
 
 {-
 getDebugMsg::ContextM String

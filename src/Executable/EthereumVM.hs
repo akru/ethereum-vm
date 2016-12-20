@@ -30,7 +30,7 @@ import qualified Blockchain.Bagger as Bagger
 ethereumVM::LoggingT IO ()
 ethereumVM = do
   offsetIORef <- liftIO $ newIORef flags_startingBlock
-  evalContextM $ do
+  _ <- execContextM $ do
         Bagger.setCalculateIntrinsicGas calculateIntrinsicGas'
         firstBlock <- getFirstBlockFromSequencer
         let firstBlockSHA  = outputBlockHash firstBlock
@@ -67,6 +67,7 @@ ethereumVM = do
             produceUnminedBlocks [(outputBlockToBlock newBlock)]
 
             return ()
+  return ()
 
 getFirstBlockFromSequencer :: (MonadLogger m, HasBlockSummaryDB m) => m OutputBlock
 getFirstBlockFromSequencer = do
