@@ -41,15 +41,11 @@ produceResponse id theData = do
 
 runJsonRpcCommand::(MonadLogger m, HasStateDB m, HasHashDB m, HasSQLDB m)=>
                    JsonRpcCommand->m ()
-runJsonRpcCommand c@JRCGetBalance{jrcAddress=addressBytes, jrcBlockString=blockString, jrcId=id} = do
+runJsonRpcCommand c@JRCGetBalance{jrcAddress=address, jrcBlockString=blockString, jrcId=id} = do
   liftIO $ putStrLn $ "running command: " ++ show c
   bestBlock <- getBestBlock
   setStateDBStateRoot $ blockDataStateRoot $ blockBlockData bestBlock
-  case decodeOrFail $ BL.fromStrict addressBytes of
-   Left (_, _, e) -> logErrorN $ T.pack $
-                           "Bad Command sent from JsonRpc: " ++ show e
-   Right ("", _, address) -> do
-     addressState <- getAddressState address
-     let response = show $ addressStateBalance addressState
-     liftIO $ produceResponse id $ BC.pack response
-     liftIO $ putStrLn response
+  addressState <- getAddressState address
+  let response = show $ addressStateBalance addressState
+  liftIO $ produceResponse id $ BC.pack response
+  liftIO $ putStrLn response
