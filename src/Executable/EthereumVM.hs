@@ -27,6 +27,7 @@ import qualified Blockchain.Bagger as Bagger
 
 ethereumVM::LoggingT IO ()
 ethereumVM = do
+  let makeLazyBlocks = lazyBlocks $ quarryConfig ethConf
   offsetIORef <- liftIO $ newIORef flags_startingBlock
   evalContextM $ do
         Bagger.setCalculateIntrinsicGas calculateIntrinsicGas'
@@ -49,8 +50,9 @@ ethereumVM = do
             forM_ blocks $ \b -> putBSum (outputBlockHash b) (blockHeaderToBSum $ obBlockData b)
             addBlocks False blocks
 
-            newBlock <- Bagger.makeNewBlock
-            produceUnminedBlocks [(outputBlockToBlock newBlock)]
+            when ((not makeLazyBlocks) || (not $ null newTXs)) $ do
+                newBlock <- Bagger.makeNewBlock
+                produceUnminedBlocks [(outputBlockToBlock newBlock)]
 
             return ()
 
