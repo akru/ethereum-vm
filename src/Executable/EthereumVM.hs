@@ -10,6 +10,7 @@ import Control.Monad.IO.Class
 import Data.IORef
 import qualified Data.Text as T
 
+import Network.Kafka
 import Network.Kafka.Protocol
                     
 import Blockchain.BlockChain
@@ -17,6 +18,7 @@ import Blockchain.Data.BlockSummary
 import Blockchain.DB.BlockSummaryDB
 import Blockchain.EthConf
 import Blockchain.JsonRpcCommand
+import Blockchain.KafkaTopics
 import Blockchain.VMOptions
 import Blockchain.VMContext
 import Blockchain.Sequencer.Event
@@ -36,12 +38,24 @@ ethereumVM = do
             firstBlockHead = obBlockData firstBlock
         putBSum firstBlockSHA (blockHeaderToBSum firstBlockHead)
         Bagger.processNewBestBlock firstBlockSHA firstBlockHead -- bootstrap Bagger with genesis block
+        lastOffsetOrError <- liftIO $ runKafkaConfigured "ethreum-vm" $ 
+                             getLastOffset LatestTime 0 (lookupTopic "seqevents")
+
+        let lastOffset =
+              case lastOffsetOrError of
+               Left e -> error $ show e
+               Right val -> val
+
+        logInfoN $ T.pack $ "lastOffset = " ++ show lastOffset
+        
         forever $ do
             logInfoN "Getting Blocks/Txs"
+            offset <- liftIO $ readIORef offsetIORef
             seqEvents <- getUnprocessedKafkaEvents offsetIORef
 
-            let newCommands = [(command, theData, blockString, id) | OEJsonRpcCommand command theData blockString id <- seqEvents]
-            forM_ newCommands $ \(c, d, b, i) -> runJsonRpcCommand c d b i
+            when (fromIntegral offset >= lastOffset) $ do
+              let newCommands = [c | OEJsonRpcCommand c <- seqEvents]
+              forM_ newCommands runJsonRpcCommand
             
             let newTXs = [t | OETx t <- seqEvents]
             unless (null newTXs) $ logInfoN (T.pack ("adding " ++ (show $ length newTXs) ++ " txs to mempool")) >> Bagger.addTransactionsToMempool newTXs

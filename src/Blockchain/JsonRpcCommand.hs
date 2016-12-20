@@ -26,6 +26,7 @@ import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
 import Blockchain.EthConf
 import Blockchain.KafkaTopics
+import Blockchain.Sequencer.Event
 
 produceResponse::String->B.ByteString->IO ()
 produceResponse id theData = do
@@ -39,12 +40,12 @@ produceResponse id theData = do
 
 
 runJsonRpcCommand::(MonadLogger m, HasStateDB m, HasHashDB m, HasSQLDB m)=>
-                   String->B.ByteString->String->String->m ()
-runJsonRpcCommand command theData blockString id = do
-  liftIO $ putStrLn $ "running command: " ++ command ++ ": " ++ BC.unpack (B16.encode theData)
+                   JsonRpcCommand->m ()
+runJsonRpcCommand c@JRCGetBalance{jrcAddress=addressBytes, jrcBlockString=blockString, jrcId=id} = do
+  liftIO $ putStrLn $ "running command: " ++ show c
   bestBlock <- getBestBlock
   setStateDBStateRoot $ blockDataStateRoot $ blockBlockData bestBlock
-  case decodeOrFail $ BL.fromStrict theData of
+  case decodeOrFail $ BL.fromStrict addressBytes of
    Left (_, _, e) -> logErrorN $ T.pack $
                            "Bad Command sent from JsonRpc: " ++ show e
    Right ("", _, address) -> do
